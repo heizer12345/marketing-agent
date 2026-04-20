@@ -1,0 +1,23 @@
+{
+  "target_countries": [
+    {"code": "ID", "name": "Indonesia", "region": "SEA", "priority": "high"},
+    {"code": "PH", "name": "Philippines", "region": "SEA", "priority": "high"},
+    {"code": "TH", "name": "Thailand", "region": "SEA", "priority": "high"},
+    {"code": "BR", "name": "Brazil", "region": "LatAm", "priority": "high"},
+    {"code": "US", "name": "United States", "region": "North America", "priority": "high"},
+    {"code": "MX", "name": "Mexico", "region": "LatAm", "priority": "high"}
+  ],
+  "acceptable_countries": [
+    {"code": "MY", "name": "Malaysia", "region": "SEA"},
+    {"code": "SG", "name": "Singapore", "region": "SEA"},
+    {"code": "VN", "name": "Vietnam", "region": "SEA"}
+  ],
+  "blocked_regions": ["Africa", "Middle East", "Eastern Europe"],
+  "kpi_targets": {
+    "ctr_min": 2.0,
+    "cpc_max_usd": 1.50,
+    "conversion_rate_min": 2.0,
+    "roas_min": 3.0,
+    "bounce_rate_max": 65.0
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "direct_ai_sourcing": [
+    {"domain": "accio.com", "name": "Accio", "tier": "primary"},
+    {"domain": "findmyfactory.eu", "name": "FindMyFactory", "tier": "primary"},
+    {"domain": "wonnda.com", "name": "Wonnda / Nova AI", "tier": "primary"},
+    {"domain": "sourceready.com", "name": "SourceReady", "tier": "primary"},
+    {"domain": "matchory.com", "name": "Matchory", "tier": "primary"},
+    {"domain": "lightsource.ai", "name": "LightSource", "tier": "primary"},
+    {"domain": "scoutbee.com", "name": "Scoutbee (Coupa)", "tier": "secondary"}
+  ],
+  "traditional_sourcing": [
+    {"domain": "globalsources.com", "name": "Global Sources", "tier": "primary"},
+    {"domain": "alibaba.com", "name": "Alibaba", "tier": "secondary"},
+    {"domain": "made-in-china.com", "name": "Made-in-China", "tier": "secondary"},
+    {"domain": "indiamart.com", "name": "IndiaMART", "tier": "secondary"},
+    {"domain": "tradekey.com", "name": "TradeKey", "tier": "tertiary"},
+    {"domain": "kompass.com", "name": "Kompass", "tier": "tertiary"},
+    {"domain": "ec21.com", "name": "EC21", "tier": "tertiary"},
+    {"domain": "tradewheel.com", "name": "TradeWheel", "tier": "tertiary"}
+  ],
+  "b2b_supplier_discovery": [
+    {"domain": "tealbook.com", "name": "TealBook / Supplier.io", "tier": "secondary"},
+    {"domain": "veridion.com", "name": "Veridion", "tier": "secondary"},
+    {"domain": "deep.stream", "name": "DeepStream", "tier": "tertiary"}
+  ],
+  "ai_procurement": [
+    {"domain": "cofactr.com", "name": "Cofactr", "tier": "tertiary"},
+    {"domain": "coupa.com", "name": "Coupa", "tier": "secondary"},
+    {"domain": "ivalua.com", "name": "Ivalua", "tier": "tertiary"},
+    {"domain": "jaggaer.com", "name": "JAGGAER", "tier": "tertiary"},
+    {"domain": "gep.com", "name": "GEP SMART", "tier": "tertiary"}
+  ],
+  "enterprise": [
+    {"domain": "ariba.com", "name": "SAP Ariba", "tier": "tertiary"}
+  ],
+  "regional": [
+    {"domain": "buykorea.org", "name": "BuyKorea", "tier": "tertiary"},
+    {"domain": "sourcengine.com", "name": "Sourcengine", "tier": "tertiary"}
+  ],
+  "settings": {
+    "deep_dive_limit": 7,
+    "overview_limit": 15,
+    "semrush_keywords_per_domain": 100
+  }
+}
