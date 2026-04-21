@@ -1811,6 +1811,39 @@ def render_full_page(
         f'id="tab-{first_tab_id}" class="tab-content" style="display:block"',
     )
 
+    # ── Structural guarantees (G4+G6): inject missing components into every report ──
+    # R18 — Tracking banner: inject at the very top of the first tab if missing
+    _has_tracking = any(kw in all_tabs for kw in ["DATA GAP", "TRACKING ISSUE"])
+    if not _has_tracking:
+        _default_banner = render_tracking_banner(
+            "info",
+            "GA4 conversion tracking has a known gap — conversion metrics (CVR, CPL, Conversions) "
+            "may be 0 or unreliable. Engagement metrics shown in this report are unaffected.",
+            ["CVR", "Conversions", "CPL"],
+        )
+        # Insert banner immediately after the opening div of the first tab
+        _tab_open = f'id="tab-{first_tab_id}" class="tab-content" style="display:block">'
+        if _tab_open in all_tabs:
+            all_tabs = all_tabs.replace(_tab_open, _tab_open + _default_banner, 1)
+
+    # R9 — Exec summary: inject a minimal amber-filled table if missing
+    _has_exec = "exec-summary" in all_tabs
+    if not _has_exec:
+        _default_exec = render_exec_summary_table([
+            {"area": "Paid Acquisition",    "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
+            {"area": "Organic / SEO",       "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
+            {"area": "CRO / On-site",       "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
+            {"area": "Brand & Social",      "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
+            {"area": "Product Analytics",   "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
+        ])
+        # Insert exec summary after the tracking banner (right after its closing tag) or after tab open
+        _insert_marker = _tab_open + _default_banner if not _has_tracking else _tab_open
+        if _insert_marker in all_tabs:
+            all_tabs = all_tabs.replace(
+                _insert_marker,
+                _insert_marker + _default_exec, 1
+            )
+
     # Accept both a list of JS strings and a pre-joined string
     all_chart_js = chart_init_js if isinstance(chart_init_js, str) else "\n".join(chart_init_js)
 
