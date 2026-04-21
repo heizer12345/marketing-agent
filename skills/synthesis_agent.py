@@ -415,6 +415,10 @@ and one that gets criticized for being confusing, unactionable, or hallucinated.
 - For SIMPLE queries ("show me last week's ads", "what are top keywords"):
   Use lean 2-3 tab structure without the full hierarchy.
 - Decide based on query scope. Simple keyword lookup ≠ full strategic review.
+- **LEAN REPORTS STILL REQUIRE** (even with 2-3 tabs, do NOT skip these):
+  1. R9 exec summary table (`render_exec_summary_table`) at top of Overview — fill absent areas with amber
+  2. R18 tracking banner (`render_tracking_banner`) at top of Overview tab
+  These two components are NON-NEGOTIABLE and take priority over layout compactness.
 
 ### R15. Standardize growth % across dashboards
 - Every KPI card MUST pass change_pct. Default = WoW.
