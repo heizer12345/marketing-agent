@@ -35,26 +35,36 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
             --radius: 10px;
         }
         * { margin:0; padding:0; box-sizing:border-box; }
+        html, body { overflow-x:hidden; }
         body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
             background:var(--gray-50); color:var(--gray-800); min-height:100vh; }
 
         /* ── Top Nav ── */
-        .topnav { background:var(--navy); padding:12px 24px; display:flex; align-items:center; gap:16px;
-            position:sticky; top:0; z-index:100; }
-        .topnav-logo { color:#fff; font-weight:700; font-size:16px; }
-        .topnav-logo span { color:var(--blue); }
-        .topnav-spacer { flex:1; }
-        .topnav .status-pills { display:flex; gap:4px; }
-        .status-pill { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:500; }
-        .status-pill.on { background:rgba(16,185,129,0.2); color:#10b981; }
-        .status-pill.off { background:rgba(255,255,255,0.05); color:var(--gray-500); }
-        .user-select { background:var(--navy-light); color:#fff; border:1px solid rgba(255,255,255,0.1);
-            border-radius:6px; padding:5px 10px; font-size:12px; cursor:pointer; }
-        .arch-btn { display:inline-flex; align-items:center; gap:6px; background:rgba(255,255,255,0.06);
+        .topnav { background:var(--navy); padding:0 20px; height:52px; display:flex; align-items:center;
+            gap:10px; position:sticky; top:0; z-index:100;
+            border-bottom:1px solid rgba(255,255,255,0.07); }
+        .topnav-brand { display:flex; align-items:center; gap:8px; flex-shrink:0; text-decoration:none; }
+        .topnav-brand-icon { width:28px; height:28px; background:var(--blue); border-radius:7px;
+            display:flex; align-items:center; justify-content:center; font-size:14px; flex-shrink:0; }
+        .topnav-brand-name { color:#fff; font-weight:700; font-size:14px; white-space:nowrap; }
+        .topnav-brand-name em { color:#60a5fa; font-style:normal; }
+        .topnav-sep { width:1px; height:22px; background:rgba(255,255,255,0.1); flex-shrink:0; }
+        .topnav .status-pills { display:flex; gap:4px; flex:1; overflow:hidden; min-width:0; flex-wrap:nowrap; }
+        .status-pill { font-size:10px; padding:2px 8px; border-radius:10px; font-weight:500; white-space:nowrap; flex-shrink:0; }
+        .status-pill.on { background:rgba(16,185,129,0.18); color:#34d399; border:1px solid rgba(16,185,129,0.25); }
+        .status-pill.off { background:rgba(255,255,255,0.04); color:#475569; border:1px solid rgba(255,255,255,0.06); }
+        .topnav-actions { display:flex; align-items:center; gap:6px; flex-shrink:0; }
+        .nav-btn { display:inline-flex; align-items:center; gap:5px; background:rgba(255,255,255,0.06);
             color:#94a3b8; border:1px solid rgba(255,255,255,0.1); border-radius:6px;
-            padding:5px 12px; font-size:12px; font-weight:500; text-decoration:none;
-            transition:all .2s; white-space:nowrap; }
-        .arch-btn:hover { background:rgba(255,255,255,0.1); color:#fff; border-color:rgba(255,255,255,0.2); }
+            padding:5px 11px; font-size:12px; font-weight:500; text-decoration:none;
+            transition:all .15s; white-space:nowrap; cursor:pointer; }
+        .nav-btn:hover { background:rgba(255,255,255,0.11); color:#e2e8f0; border-color:rgba(255,255,255,0.18); }
+        .nav-btn-prompts { background:rgba(59,130,246,0.12); color:#93c5fd; border-color:rgba(59,130,246,0.25); }
+        .nav-btn-prompts:hover { background:rgba(59,130,246,0.22); color:#bfdbfe; border-color:rgba(59,130,246,0.4); }
+        .user-select { background:rgba(255,255,255,0.06); color:#e2e8f0;
+            border:1px solid rgba(255,255,255,0.1); border-radius:6px;
+            padding:5px 10px; font-size:12px; cursor:pointer; }
+        .user-select:focus { outline:none; border-color:var(--blue); }
 
         /* ── Create Ticket Bar ── */
         .create-bar { max-width:1200px; margin:20px auto; padding:0 24px; }
@@ -69,10 +79,10 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
         .create-btn:hover { background:var(--blue-hover); }
 
         /* ── Kanban Board ── */
-        .kanban { max-width:1200px; margin:0 auto; padding:0 24px 40px;
-            display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px; }
+        .kanban { max-width:1200px; width:100%; margin:0 auto; padding:0 24px 40px;
+            display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:16px; }
         .kanban-col { background:var(--gray-100); border-radius:var(--radius); padding:12px;
-            min-height:200px; }
+            min-height:200px; min-width:0; overflow:hidden; }
         .kanban-col-header { font-size:12px; font-weight:700; text-transform:uppercase;
             letter-spacing:0.05em; padding:8px 8px 12px; display:flex; align-items:center; gap:8px; }
         .kanban-col-header .count { background:var(--gray-200); color:var(--gray-600);
@@ -287,19 +297,28 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
 
 <!-- Top Navigation -->
 <nav class="topnav">
-    <div class="topnav-logo">Sourcy <span>Analyst</span></div>
-    <div class="topnav-spacer"></div>
-    <div class="status-pills">""" + pills + r"""</div>
-    <a href="/architecture" class="arch-btn" title="How it works">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-        Architecture
+    <a href="/" class="topnav-brand">
+        <div class="topnav-brand-icon">🤖</div>
+        <span class="topnav-brand-name">Sourcy <em>Analyst</em></span>
     </a>
-    <select class="user-select" id="userSelect" onchange="setUser(this.value)">
-        <option value="">Who are you?</option>
-        <option value="Eugene">Eugene</option>
-        <option value="Nadia">Nadia</option>
-        <option value="Afrah">Afrah</option>
-    </select>
+    <div class="topnav-sep"></div>
+    <div class="status-pills">""" + pills + r"""</div>
+    <div class="topnav-actions">
+        <a href="/architecture" class="nav-btn" title="How it works">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+            Architecture
+        </a>
+        <a href="/prompts" target="_blank" class="nav-btn nav-btn-prompts" title="View & edit agent prompts">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+            Prompts
+        </a>
+        <select class="user-select" id="userSelect" onchange="setUser(this.value)">
+            <option value="">Who are you?</option>
+            <option value="Eugene">Eugene</option>
+            <option value="Nadia">Nadia</option>
+            <option value="Afrah">Afrah</option>
+        </select>
+    </div>
 </nav>
 
 <!-- Create Ticket Bar -->
@@ -340,7 +359,6 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
                 <option value="completed">Completed</option>
             </select>
             <button id="reviewTabBtn" onclick="toggleReviewPanel()" style="display:none;background:#7c3aed;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">📋 Review Package</button>
-            <a href="/prompts" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#0f172a;color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;">🤖 See Prompts</a>
             <button class="popup-close" onclick="closePopup()">&times;</button>
         </div>
         <div class="popup-body no-artifact">
