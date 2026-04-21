@@ -982,9 +982,17 @@ async def websocket_legacy(websocket: WebSocket):
 
                 # 4. Run tasks
                 if len(tasks) == 1:
+                    # Use same tier-based timeouts as the ticket-specific endpoint
+                    _hint_leg = tasks[0].get("agent_hint", "auto")
+                    if _hint_leg in ("implementation", "content_write", "content_audit", "report"):
+                        _timeout_leg = 1800
+                    elif _hint_leg == "data_analysis":
+                        _timeout_leg = 1200
+                    else:
+                        _timeout_leg = 900
                     brief_with_id = f"[ticket_id: {ticket_id}]\n\n{tasks[0]['brief']}"
                     task_messages = build_task_context(compressed, brief_with_id)
-                    output = await _run_agent_stream(task_messages, _ws_send, ticket_id, request_start)
+                    output = await _run_agent_stream(task_messages, _ws_send, ticket_id, request_start, timeout_seconds=_timeout_leg)
                 else:
                     await _ws_send({"type": "tool_status", "label": f"🔀 Breaking into {len(tasks)} tasks..."})
 
