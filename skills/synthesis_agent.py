@@ -312,14 +312,22 @@ and one that gets criticized for being confusing, unactionable, or hallucinated.
 - BAD: "Paid sessions fell from 2,617 in W11 to 946 in W15"
 - BAD: "impressions rising between W12 and W13"
 - BAD: "identify pages behind the W13–W15 spike"
+- BAD: "W13–W17 (last 5 weeks)" in headers or period labels
+- BAD: table rows labeled "W13", "W14", "W15" etc.
 - GOOD: "Paid sessions fell from 2,617 (Mar 10–16) to 946 (Apr 7–13)"
 - GOOD: "impressions rising between Mar 18–24 and Mar 25–31"
 - GOOD: "identify pages behind the Mar 25–Apr 13 impression spike"
+- GOOD: "Mar 17–Apr 20 (last 5 weeks)" in headers
 - **In your generated Python script**: always use `week_label` field (e.g. "Mar 10–16"), `week_start`
   (e.g. "Mar 10"), or `week_end` from the data — NEVER use the raw `week` field ("2026-W11") in visible text.
 - **Search Console data**: `DATA['keyword_positions']['week_labels']` is a list of date strings like
   "Mar 4–10" matching the `weeks` array. Use `week_labels[i]` not `weeks[i]` for chart X-axis.
 - **GA4 weekly data**: each period has `week_label` ("Mar 10–16") — use this everywhere.
+- **Meta Ads weekly data**: each period in `get_meta_multi_week_trend` and `get_meta_campaigns_over_time`
+  now has `week_label` ("Mar 17–23"), `week_start`, `week_end`. The top-level `week_labels` array is
+  available for chart X-axis. NEVER compute W## labels from `date_start` — use `period["week_label"]`.
+  BAD: computing `datetime.strptime(date_start, "%Y-%m-%d").strftime("%G-W%V")` and displaying it.
+  GOOD: using `period["week_label"]` directly as the table row label and chart axis label.
 - Chart axis labels: use "Mar 10" or "Mar 10–16" not "W11". ECharts xAxis.data must be date strings.
 - The `period` argument to render_full_page() must use dates, not week numbers.
 - If week_label is missing from a data source, compute it: ISO week "2026-W11" → Monday is strptime("2026-W11-1", "%G-W%V-%u")
@@ -370,12 +378,13 @@ and one that gets criticized for being confusing, unactionable, or hallucinated.
 - Surface: strongest channels, best-performing countries/campaigns, segments beating benchmark.
 - Balance the narrative — never emit a report that's 100% problems.
 
-### R9. Executive Summary table — REQUIRED at top of Overview
-- Before the Decision Summary, include a render_sortable_table with columns [Area, Status, Why].
-- Areas: Traffic Quality, Targeting Accuracy, Lead Generation, Tracking Reliability, Content/SEO.
-- Status: 🟢 Healthy / 🟡 Mixed / 🔴 Needs Attention / ⚪ Unknown (no data).
-- Why: one-line explanation.
-- This is the exec-level diagnostic view — quick scan before diving into detail.
+### R9. Executive Summary table — REQUIRED at top of Overview (always, every report)
+- Use `render_exec_summary_table(areas)` at the very top of the Overview tab (R20).
+- Include ALL 5 canonical areas: "Paid Acquisition", "Organic / SEO", "CRO / On-site", "Brand & Social", "Product Analytics"
+- For areas with NO data (e.g., a single-platform query), set status="amber" and verdict="No data available for this query".
+  Do NOT skip the table — fill it partially. A reader can see at a glance which areas were analysed.
+- For single-platform queries (e.g., Instagram only, organic only): still include all 5 rows; only Brand & Social will be "green/red", others will be "amber" (no data).
+- This is the exec-level diagnostic view — 5-second scan before diving into detail.
 
 ### R10. Root-cause diagnostics for every problem (NOT just symptoms)
 - For every flagged issue, include: (1) observation, (2) hypothesized root cause, (3) evidence linking them.
@@ -428,14 +437,22 @@ and one that gets criticized for being confusing, unactionable, or hallucinated.
 - GOOD evidence: "Campaign 'PH-Sourcing-V2' has 'Advantage+ Placements' = ON (Meta Ads Manager setting).
    This expanded delivery to SG/MY/VN despite country target = PH only."
 
-### R18. New component — Tracking Status Banner (G4)
-- When any metric is unreliable due to a tracking gap (GA4 conversion tracking broken, Meta Pixel mismatch,
-  PostHog not firing), add `render_tracking_banner(severity, message, affected_metrics)` at the TOP
-  of EVERY tab that references the affected metric.
-- severity: "error" for complete data loss, "warning" for partial, "info" for minor.
+### R18. New component — Tracking Status Banner (G4) — ALWAYS REQUIRED
+- **MANDATORY**: Sourcy's GA4 conversion tracking is KNOWN to be broken. ALWAYS include a tracking
+  banner on EVERY report — even single-platform queries (Instagram-only, SEO-only, etc.).
+- Place `render_tracking_banner(severity, message, affected_metrics)` at the TOP of the Overview tab
+  and at the top of EVERY tab that references CVR, CPL, or conversion data.
+- severity: "error" if GA4/PostHog shows 0 conversions; "warning" if data is partially available.
 - affected_metrics: list of strings e.g. ["CVR", "CPL", "Conversions"]
-- Example: `render_tracking_banner("error", "GA4 conversion tracking is not firing on the signup page. "
-  "All conversion metrics below are 0 — actual conversions visible in Sourcy DB only.", ["CVR", "Conversions", "CPL"])`
+- **Default standing banner** (use when conversion data is not in scope or shows zeros):
+  `render_tracking_banner("error", "GA4 conversion tracking is not firing correctly. Conversion metrics "
+  "shown here may be 0 or unreliable. Real leads are tracked in Sourcy DB — cross-reference before "
+  "making CPL or CVR decisions.", ["CVR", "Conversions", "CPL"])`
+- For reports that DON'T involve conversion metrics (e.g. SEO keyword analysis, Instagram engagement):
+  `render_tracking_banner("info", "Note: GA4 conversion tracking has a known gap — any conversion "
+  "metrics in this report are unreliable. Organic engagement metrics (clicks, impressions, saves) "
+  "are unaffected.", ["CVR", "Conversions"])`
+- Do NOT skip this rule even for narrow queries. One banner on the Overview tab is sufficient.
 
 ### R19. New component — Decision Table (G5)
 - Replace freeform "notes" columns in country/campaign tables with `render_decision_table(rows)`.

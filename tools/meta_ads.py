@@ -773,9 +773,26 @@ def get_meta_campaign_trend(
             if prev_spend is not None and prev_spend > 0:
                 spend_change = round((spend - prev_spend) / prev_spend * 100, 1)
 
+            # Build human-readable period label from date_start / date_stop
+            ds = ins.get("date_start", "")
+            de = ins.get("date_stop", "")
+            try:
+                _ds = datetime.strptime(ds, "%Y-%m-%d")
+                _de = datetime.strptime(de, "%Y-%m-%d")
+                week_label = f"{_ds.strftime('%b %d')}–{_de.strftime('%b %d')}"
+                week_start = _ds.strftime("%b %d")
+                week_end = _de.strftime("%b %d")
+            except Exception:
+                week_label = ds
+                week_start = ds
+                week_end = de
+
             periods.append({
-                "date_start": ins.get("date_start", ""),
-                "date_stop": ins.get("date_stop", ""),
+                "date_start": ds,
+                "date_stop": de,
+                "week_label": week_label,   # e.g. "Mar 17–23" — use in charts/tables (NOT W## labels)
+                "week_start": week_start,   # e.g. "Mar 17"
+                "week_end": week_end,       # e.g. "Mar 23"
                 "spend": f"{spend:.2f}",
                 "impressions": ins.get("impressions", "0"),
                 "clicks": ins.get("clicks", "0"),
@@ -797,11 +814,13 @@ def get_meta_campaign_trend(
         else:
             best = worst = None
 
+        week_labels = [p["week_label"] for p in periods]
         return json.dumps({
             "campaign_id": campaign_id or "account_level",
             "date_range": time_range,
             "time_increment_days": int(time_increment),
             "periods_found": len(periods),
+            "week_labels": week_labels,   # ["Mar 17–23", "Mar 24–30", …] — use for chart X-axis
             "periods": periods,
             "best_period": best,
             "worst_period": worst,
@@ -1090,9 +1109,26 @@ def get_meta_multi_week_trend(campaign_id: str = "", weeks: int = 5) -> str:
                     if oc.get("action_type") == "outbound_click":
                         outbound = int(oc.get("value", 0))
 
+            # Build human-readable week label from date_start / date_stop
+            ds = ins.get("date_start", "")
+            de = ins.get("date_stop", "")
+            try:
+                _ds = datetime.strptime(ds, "%Y-%m-%d")
+                _de = datetime.strptime(de, "%Y-%m-%d")
+                week_label = f"{_ds.strftime('%b %d')}–{_de.strftime('%b %d')}"
+                week_start = _ds.strftime("%b %d")
+                week_end = _de.strftime("%b %d")
+            except Exception:
+                week_label = ds
+                week_start = ds
+                week_end = de
+
             periods.append({
-                "date_start": ins.get("date_start", ""),
-                "date_stop": ins.get("date_stop", ""),
+                "date_start": ds,
+                "date_stop": de,
+                "week_label": week_label,   # e.g. "Mar 17–23" — use this in charts/tables (NOT W## labels)
+                "week_start": week_start,   # e.g. "Mar 17"
+                "week_end": week_end,       # e.g. "Mar 23"
                 "spend": f"{spend:.2f}",
                 "impressions": ins.get("impressions", "0"),
                 "reach": ins.get("reach", "0"),
@@ -1116,10 +1152,12 @@ def get_meta_multi_week_trend(campaign_id: str = "", weeks: int = 5) -> str:
             })
             prev_spend = spend
 
+        week_labels = [p["week_label"] for p in periods]
         return json.dumps({
             "campaign_id": campaign_id or "account_level",
             "weeks_requested": weeks,
             "periods_found": len(periods),
+            "week_labels": week_labels,   # ["Mar 17–23", "Mar 24–30", …] — use for chart X-axis
             "periods": periods,
         })
     except Exception as e:
