@@ -32,12 +32,37 @@ def _save_script_error(script_filename: str, error_msg: str, tb: str) -> None:
         pass  # Non-critical
 
 
+def _fix_iso_week_labels(html: str) -> str:
+    """Convert ISO week strings (e.g. 2026-W12) to human-readable labels (e.g. Mar 18–24).
+    Prevents R1 bare-W## violations from ECharts xAxis data using raw ISO weeks."""
+    import re as _re
+
+    def _iso_to_label(m):
+        s = m.group(0)
+        try:
+            year_str, w_str = s.split("-W")
+            year, wnum = int(year_str), int(w_str)
+            monday = datetime.strptime(f"{year}-W{wnum:02d}-1", "%G-W%V-%u")
+            sunday = monday + timedelta(days=6)
+            # Same-month: "Mar 18–24"; cross-month: "Mar 29–Apr 4"
+            if monday.month == sunday.month:
+                return f"{monday.strftime('%b')} {monday.day}–{sunday.day}"
+            else:
+                return f"{monday.strftime('%b')} {monday.day}–{sunday.strftime('%b')} {sunday.day}"
+        except Exception:
+            return s  # Leave unchanged if parsing fails
+
+    return _re.sub(r'\b20\d\d-W\d{1,2}\b', _iso_to_label, html)
+
+
 def _save_html(html: str, title: str = "Analysis") -> dict:
     """Save HTML to disk and return result dict."""
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filename = f"report_{timestamp}.html"
     filepath = config.OUTPUT_DIR / filename
     try:
+        # Post-process: convert ISO week strings → human-readable labels (R1 compliance)
+        html = _fix_iso_week_labels(html)
         filepath.write_text(html, encoding="utf-8")
         return {
             "success": True,
@@ -150,6 +175,10 @@ def execute_report_script(script_code: str, data_json: str = "{}", title: str = 
         "render_message_alignment_card": _hc.render_message_alignment_card,
         "render_conversion_funnel": _hc.render_conversion_funnel,
         "render_reasoning_chain": _hc.render_reasoning_chain,
+        # R9/R18/R19 compliance components (frequently used by synthesis agent)
+        "render_tracking_banner": _hc.render_tracking_banner,
+        "render_exec_summary_table": _hc.render_exec_summary_table,
+        "render_decision_table": _hc.render_decision_table,
         # Result placeholder
         "RESULT_HTML": None,
     }
