@@ -1813,10 +1813,11 @@ def render_full_page(
 
     # ── Structural guarantees (G4+G6): inject missing components into every report ──
     # R18 — Tracking banner: inject at the very top of the first tab if missing
-    _has_tracking = any(kw in all_tabs for kw in ["DATA GAP", "TRACKING ISSUE"])
+    # Check for all three severity labels (DATA GAP, TRACKING ISSUE, NOTE) to avoid double-inject
+    _has_tracking = any(kw in all_tabs for kw in ["DATA GAP", "TRACKING ISSUE", "NOTE"])
     if not _has_tracking:
         _default_banner = render_tracking_banner(
-            "info",
+            "warning",
             "GA4 conversion tracking has a known gap — conversion metrics (CVR, CPL, Conversions) "
             "may be 0 or unreliable. Engagement metrics shown in this report are unaffected.",
             ["CVR", "Conversions", "CPL"],
