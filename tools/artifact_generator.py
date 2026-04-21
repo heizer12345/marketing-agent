@@ -33,26 +33,53 @@ def _save_script_error(script_filename: str, error_msg: str, tb: str) -> None:
 
 
 def _fix_iso_week_labels(html: str) -> str:
-    """Convert ISO week strings (e.g. 2026-W12) to human-readable labels (e.g. Mar 18–24).
-    Prevents R1 bare-W## violations from ECharts xAxis data using raw ISO weeks."""
+    """Convert ISO week strings to human-readable labels to pass R1 (no bare W##).
+
+    Handles two forms:
+      "2026-W12"  →  "Mar 16–22"  (full ISO — easy, year known)
+      "W12"       →  "Mar 16–22"  (bare week — assume current year)
+
+    W3C is explicitly excluded to avoid collateral damage.
+    Both conversions are safe in an HTML report context: W## only appears
+    as week labels or ECharts xAxis data.
+    """
     import re as _re
 
-    def _iso_to_label(m):
-        s = m.group(0)
-        try:
-            year_str, w_str = s.split("-W")
-            year, wnum = int(year_str), int(w_str)
-            monday = datetime.strptime(f"{year}-W{wnum:02d}-1", "%G-W%V-%u")
-            sunday = monday + timedelta(days=6)
-            # Same-month: "Mar 18–24"; cross-month: "Mar 29–Apr 4"
-            if monday.month == sunday.month:
-                return f"{monday.strftime('%b')} {monday.day}–{sunday.day}"
-            else:
-                return f"{monday.strftime('%b')} {monday.day}–{sunday.strftime('%b')} {sunday.day}"
-        except Exception:
-            return s  # Leave unchanged if parsing fails
+    current_year = datetime.now().year
 
-    return _re.sub(r'\b20\d\d-W\d{1,2}\b', _iso_to_label, html)
+    def _week_to_label(year: int, wnum: int) -> str:
+        monday = datetime.strptime(f"{year}-W{wnum:02d}-1", "%G-W%V-%u")
+        sunday = monday + timedelta(days=6)
+        if monday.month == sunday.month:
+            return f"{monday.strftime('%b')} {monday.day}–{sunday.day}"
+        return f"{monday.strftime('%b')} {monday.day}–{sunday.strftime('%b')} {sunday.day}"
+
+    def _iso_to_label(m):
+        """Handle 2026-W12 format."""
+        try:
+            year_str, w_str = m.group(0).split("-W")
+            return _week_to_label(int(year_str), int(w_str))
+        except Exception:
+            return m.group(0)
+
+    def _bare_to_label(m):
+        """Handle bare W12 format — assume current year. Skip W3C."""
+        raw = m.group(0)
+        if raw == "W3C":
+            return raw
+        try:
+            wnum = int(raw[1:])
+            if wnum < 1 or wnum > 53:
+                return raw
+            return _week_to_label(current_year, wnum)
+        except Exception:
+            return raw
+
+    # Pass 1: full ISO format (2026-W12) — more specific, do first
+    html = _re.sub(r'\b20\d\d-W\d{1,2}\b', _iso_to_label, html)
+    # Pass 2: bare week numbers (W12) — after pass 1 so no double-conversion
+    html = _re.sub(r'\bW\d{1,2}\b', _bare_to_label, html)
+    return html
 
 
 def _save_html(html: str, title: str = "Analysis") -> dict:
