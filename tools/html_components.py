@@ -1812,9 +1812,13 @@ def render_full_page(
     )
 
     # ── Structural guarantees (G4+G6): inject missing components into every report ──
+    # Define tab opener once — used by both R18 and R9 inject logic
+    _tab_open = f'id="tab-{first_tab_id}" class="tab-content" style="display:block">'
+
     # R18 — Tracking banner: inject at the very top of the first tab if missing
     # Check for all three severity labels (DATA GAP, TRACKING ISSUE, NOTE) to avoid double-inject
     _has_tracking = any(kw in all_tabs for kw in ["DATA GAP", "TRACKING ISSUE", "NOTE"])
+    _default_banner = ""
     if not _has_tracking:
         _default_banner = render_tracking_banner(
             "warning",
@@ -1823,7 +1827,6 @@ def render_full_page(
             ["CVR", "Conversions", "CPL"],
         )
         # Insert banner immediately after the opening div of the first tab
-        _tab_open = f'id="tab-{first_tab_id}" class="tab-content" style="display:block">'
         if _tab_open in all_tabs:
             all_tabs = all_tabs.replace(_tab_open, _tab_open + _default_banner, 1)
 
@@ -1837,8 +1840,9 @@ def render_full_page(
             {"area": "Brand & Social",      "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
             {"area": "Product Analytics",   "status": "amber", "headline": "See report for details", "delta": "", "delta_dir": "neutral", "verdict": "Check individual tabs"},
         ])
-        # Insert exec summary after the tracking banner (right after its closing tag) or after tab open
-        _insert_marker = _tab_open + _default_banner if not _has_tracking else _tab_open
+        # Insert exec summary after the injected banner (if any) or directly after tab open
+        # _default_banner is "" when _has_tracking=True (LLM provided banner), so this is always safe
+        _insert_marker = _tab_open + _default_banner
         if _insert_marker in all_tabs:
             all_tabs = all_tabs.replace(
                 _insert_marker,
