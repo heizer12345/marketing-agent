@@ -110,8 +110,9 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
 
         /* Popup Header */
         .popup-header { padding:12px 20px; border-bottom:1px solid var(--gray-200);
-            display:flex; align-items:center; gap:12px; background:var(--gray-50); flex-shrink:0; }
-        .popup-title { font-size:15px; font-weight:600; flex:1; }
+            display:flex; align-items:center; gap:8px; background:var(--gray-50); flex-shrink:0;
+            flex-wrap:wrap; overflow-x:hidden; min-width:0; }
+        .popup-title { font-size:15px; font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .popup-status { font-size:12px; padding:4px 10px; border-radius:6px; border:1px solid var(--gray-200);
             background:#fff; cursor:pointer; }
         .popup-close { width:32px; height:32px; border:none; background:var(--gray-100);
@@ -265,7 +266,7 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
         .md-content th { background:var(--gray-100); font-weight:600; }
         .md-content hr { border:none; border-top:1px solid var(--gray-200); margin:20px 0; }
         .artifact-toolbar { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--gray-200);
-            background:#fff; flex-shrink:0; }
+            background:#fff; flex-shrink:0; overflow-x:hidden; min-width:0; flex-wrap:wrap; }
         .artifact-toolbar .artifact-type { font-size:11px; font-weight:600; color:var(--blue); background:var(--blue-light);
             padding:3px 8px; border-radius:4px; }
         .artifact-toolbar .artifact-name { font-size:12px; color:var(--gray-500); flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -339,6 +340,7 @@ def get_ui_html(status_ga4: bool, status_sc: bool, status_ads: bool,
                 <option value="completed">Completed</option>
             </select>
             <button id="reviewTabBtn" onclick="toggleReviewPanel()" style="display:none;background:#7c3aed;color:#fff;border:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;">📋 Review Package</button>
+            <a href="/prompts" target="_blank" style="display:inline-flex;align-items:center;gap:4px;background:#0f172a;color:#fff;text-decoration:none;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:600;">🤖 See Prompts</a>
             <button class="popup-close" onclick="closePopup()">&times;</button>
         </div>
         <div class="popup-body no-artifact">

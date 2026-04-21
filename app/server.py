@@ -148,6 +148,9 @@ app.add_middleware(
 )
 app.include_router(login_router)
 
+from app.prompts_api import router as prompts_router  # noqa: E402
+app.include_router(prompts_router)
+
 _has_ga4 = bool(config.GA4_PROPERTY_ID)
 _has_sc = bool(config.SEARCH_CONSOLE_SITE_URL)
 _has_ads = bool(config.GOOGLE_ADS_REFRESH_TOKEN)
