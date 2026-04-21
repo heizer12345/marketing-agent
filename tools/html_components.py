@@ -539,6 +539,13 @@ def render_sortable_table(
     if isinstance(header_tooltips, dict):
         header_tooltips = [header_tooltips.get(h, "") for h in headers]
 
+    # Normalise max_rows: accept string "10" from LLM-generated scripts
+    if max_rows is not None:
+        try:
+            max_rows = int(max_rows)
+        except (TypeError, ValueError):
+            max_rows = None
+
     # Normalise rows: accept list of dicts (use values in order)
     if rows and isinstance(rows[0], dict):
         rows = [list(r.values()) for r in rows]

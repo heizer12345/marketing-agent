@@ -183,6 +183,20 @@ def execute_report_script(script_code: str, data_json: str = "{}", title: str = 
         "RESULT_HTML": None,
     }
 
+    # 3b. Sanitize common unicode characters that cause SyntaxErrors in Python
+    # LLMs sometimes emit → ≥ ≤ — inside Python code (not string literals)
+    _unicode_subs = {
+        "\u2192": "->",   # →
+        "\u2190": "<-",   # ←
+        "\u2265": ">=",   # ≥
+        "\u2264": "<=",   # ≤
+        "\u2260": "!=",   # ≠
+        "\u2013": "-",    # – (en dash)
+        "\u2014": "-",    # — (em dash, outside strings)
+    }
+    for bad, good in _unicode_subs.items():
+        script_code = script_code.replace(bad, good)
+
     # 4a. Pre-compile to catch SyntaxErrors with actionable hints
     try:
         compile(script_code, "<script>", "exec")

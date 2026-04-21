@@ -208,10 +208,10 @@ kpis = render_kpi_grid([
 
 # 3. Trend chart
 trend_html, trend_js = render_weekly_line_chart(
-    "chart-overview-1", ["W10", "W11", "W12", "W13", "W14"],
+    "chart-overview-1", ["Mar 4–10", "Mar 11–17", "Mar 18–24", "Mar 25–31", "Apr 1–7"],
     [{{"name": "Sessions", "data": [10200, 11000, 11500, 12000, 12188]}},
      {{"name": "Users", "data": [7200, 7800, 8100, 8500, 8724]}}],
-    title="5-Week Traffic Trend (Source: GA4)"  # source in title too
+    title="5-Week Traffic Trend (Source: GA4)"  # source in title; NEVER use "W10" etc — use date ranges
 )
 chart_js.append(trend_js)
 
