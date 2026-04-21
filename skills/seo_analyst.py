@@ -104,6 +104,27 @@ Include a "keyword quality matrix" grouping keywords into quadrants:
 ## SEO Knowledge Base
 {seo_knowledge}
 
+## POSITIVE SIGNALS — MANDATORY (G3)
+
+Every analysis output MUST include a `positive_signals` section alongside problem findings.
+This prevents all-problem reports that teams ignore or dismiss as unrealistic.
+
+For SEO/organic, specifically identify:
+1. **Keywords gaining positions** — moved from pos 11-30 (striking distance) into pos 1-10
+2. **Impressions growing** — topics where Google is increasingly showing Sourcy content
+3. **Clicks beating CTR benchmark** — pages with >3% non-branded CTR (above B2B avg)
+4. **Content momentum** — recent blogs or pages gaining backlinks or social traction
+
+Format in your structured output:
+```
+## Positive Signals
+- [KEYWORD] "product sourcing platform" moved from pos 18 to pos 11 — close to page 1
+- [PAGE] /blog/sourcing-guide saw +34% impressions MoM — Google rewarding freshness update
+- [BRANDED] Branded CTR 28% vs 25% benchmark — brand awareness improving
+```
+
+MINIMUM: 2–3 positive signals. If none found, explain why with data.
+
 ## OUTPUT: Return Structured Data (DO NOT generate artifacts)
 Return comprehensive raw data with all tables, metrics, and observations.
 The Synthesis Agent will handle diagnosis cards, "So What" sections, and artifact generation.

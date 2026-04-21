@@ -190,11 +190,44 @@ async def api_create_ticket(body: dict = {}):
     return JSONResponse(ticket)
 
 
+def _artifact_url_exists(url: str) -> bool:
+    """Return True if the artifact file actually exists on disk.
+
+    Prevents the UI from showing Report 1/2/3/4 tabs for stale DB entries
+    whose files were never written or were cleaned up (G8 fix).
+
+    Mapping: "/reports/foo.html" → config.OUTPUT_DIR / "foo.html"
+             "/content/foo.html" → config.CONTENT_OUTPUT_DIR / "foo.html"
+             "/reviews/…"       → config.REVIEWS_OUTPUT_DIR / relative
+    """
+    if not url or not url.startswith("/"):
+        return False
+    try:
+        parts = url.lstrip("/").split("/", 1)
+        prefix = parts[0]
+        rest = parts[1] if len(parts) > 1 else ""
+        if prefix == "reports":
+            return (config.OUTPUT_DIR / rest).exists()
+        if prefix == "content":
+            return (config.CONTENT_OUTPUT_DIR / rest).exists()
+        if prefix == "reviews":
+            return (config.REVIEWS_OUTPUT_DIR / rest).exists()
+    except Exception:
+        pass
+    return True  # Unknown prefix — let frontend decide
+
+
 @app.get("/api/tickets/{ticket_id}")
 async def api_get_ticket(ticket_id: str):
     ticket = await db.get_ticket(ticket_id)
     if not ticket:
         return JSONResponse({"error": "Ticket not found"}, status_code=404)
+    # G8: filter artifacts to only those whose files actually exist on disk
+    raw_artifacts = ticket.get("artifacts") or []
+    ticket["artifacts"] = [
+        a for a in raw_artifacts
+        if _artifact_url_exists(a.get("file_path", "") if isinstance(a, dict) else a)
+    ]
     return JSONResponse(ticket)
 
 
@@ -562,7 +595,7 @@ async def _run_agent_stream(
     ticket_id: str,
     request_start: float,
     task_label: str = "",
-    timeout_seconds: int = 600,
+    timeout_seconds: int = 900,
 ) -> str:
     """
     Run master_agent with streaming, timeout, and retry.
@@ -668,7 +701,8 @@ async def _run_agent_stream(
         try:
             return await asyncio.wait_for(_run_once(), timeout=timeout_seconds)
         except asyncio.TimeoutError:
-            msg = "Task timed out after 10 min — try a more specific request."
+            mins = timeout_seconds // 60
+            msg = f"Task timed out after {mins} min — try a more specific request or break it into smaller asks."
             log.warning(f"[{ticket_id[:8]}] {msg}")
             await _ws_send({"type": "error", "error_type": "timeout", "message": msg})
             return msg
@@ -757,14 +791,15 @@ async def websocket_ticket(websocket: WebSocket, ticket_id: str):
                     # Single task — normal flow, pass compressed history
                     # Use longer timeout for complex tasks (implementation, content_write, content_audit)
                     _hint = tasks[0].get("agent_hint", "auto")
-                    # Tier-based timeouts: content ops take longest (blogs, audits, overhauls)
-                    # data_analysis is capped at 900s — deep dashboards still fit, simple queries won't hang
+                    # Tier-based timeouts. 30-min hard cap on the heaviest tier.
+                    # Raised from (600/900/1500) based on user feedback that 10-min default
+                    # was hitting false timeouts on legitimate deep analyses.
                     if _hint in ("implementation", "content_write", "content_audit", "report"):
-                        _timeout = 1500
+                        _timeout = 1800  # 30 min — website overhaul, multi-page audits
                     elif _hint == "data_analysis":
-                        _timeout = 900
+                        _timeout = 1200  # 20 min — deep dashboards with cross-skill synthesis
                     else:
-                        _timeout = 600
+                        _timeout = 900   # 15 min — simple queries, quick lookups
                     brief_with_id = f"[ticket_id: {ticket_id}]\n\n{tasks[0]['brief']}"
                     task_messages = build_task_context(compressed, brief_with_id)
                     output = await _run_agent_stream(task_messages, _ws_send, ticket_id, request_start, timeout_seconds=_timeout)

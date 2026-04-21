@@ -334,8 +334,17 @@ def get_weekly_comparison(weeks: int = 5) -> str:
             continue
 
         if iso_week not in weekly:
+            # Compute Mon–Sun for this ISO week so axes show dates not "W11"
+            week_num = int(dt.strftime("%V"))
+            year = int(dt.strftime("%G"))  # ISO year (can differ from calendar year at year edges)
+            week_monday = _dt.strptime(f"{year}-W{week_num:02d}-1", "%G-W%V-%u")
+            week_sunday = week_monday + _td(days=6)
             weekly[iso_week] = {
-                "week": iso_week, "sessions": 0, "totalUsers": 0, "newUsers": 0,
+                "week": iso_week,
+                "week_start": week_monday.strftime("%b %d"),   # e.g. "Mar 10"
+                "week_end": week_sunday.strftime("%b %d"),     # e.g. "Mar 16"
+                "week_label": f"{week_monday.strftime('%b %d')}–{week_sunday.strftime('%b %d')}",  # "Mar 10–16"
+                "sessions": 0, "totalUsers": 0, "newUsers": 0,
                 "bounceRate_sum": 0, "avgDuration_sum": 0, "engagementRate_sum": 0,
                 "engagedSessions": 0, "conversions": 0, "totalRevenue": 0, "_days": 0,
             }
@@ -360,6 +369,9 @@ def get_weekly_comparison(weeks: int = 5) -> str:
 
         result = {
             "week": w["week"],
+            "week_start": w.get("week_start", ""),   # "Mar 10" — use for chart labels, not "W11"
+            "week_end": w.get("week_end", ""),       # "Mar 16"
+            "week_label": w.get("week_label", w["week"]),  # "Mar 10–16" — use in prose and tooltips
             "sessions": w["sessions"],
             "users": w["totalUsers"],
             "new_users": w["newUsers"],

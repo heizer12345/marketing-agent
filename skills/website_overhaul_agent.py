@@ -74,10 +74,18 @@ For the original query "improve blogs SEO/AEO/GEO":
 For "audit sourcy.ai" (all pages):
 - category_filter="", top_n=20, strategy="multi_factor"
 
-### Round 1: AUDIT (batches of 5 in parallel)
-For each batch of 5 pages:
-  Call content_engine: "Run SEO + GEO + AEO audit on these URLs: [list]"
-  Include: seo_content_analysis + geo_content_analysis + aeo_content_analysis
+### Round 1: AUDIT (batches of 5 in parallel — CRITICAL FOR SPEED)
+**Parallel execution is MANDATORY for multi-page work.** Sequential = timeout.
+
+For each batch of 5 pages, issue ALL 5 content_engine calls in ONE response (parallel tool_calls):
+  Call 1: content_engine("Audit URL 1: SEO+GEO+AEO")
+  Call 2: content_engine("Audit URL 2: SEO+GEO+AEO")
+  ... (all 5 calls in one tool_calls array — OpenAI runs them concurrently)
+
+Wait for all 5 to return, then move to next batch.
+**Never do pages one-at-a-time** — 20 pages serial = 30 min timeout. Parallel batches = 6 min.
+
+Include in each audit: seo_content_analysis + geo_content_analysis + aeo_content_analysis
 
 COMPRESS each batch result to keep context manageable:
   - Score per page (SEO: X/100, GEO: X/100, AEO: X/100)
@@ -99,7 +107,9 @@ For each batch of 5 pages:
      "Rewrite [page] based on audit: [compressed findings] + keywords: [top 20]"
      → get block replacements + full rewritten file
   4. generate_page_schema_bundle(page_type, metadata) → get JSON-LD + JSX
-  5. save_schema_file + save_rewritten_tsx + generate_html_diff
+  5. save_schema_file(ticket_id, page_slug, json_ld_json) → MUST be called to write file to disk;
+     use the returned "schema_relative" in pages_json — NEVER invent paths
+  6. save_rewritten_tsx + generate_html_diff
 
 ### Confidence Gate
 After each round, assess:
@@ -123,6 +133,13 @@ Return: "Review package ready at public/reviews/<ticket_id>/index.html"
 5. **Top 100 keywords per page** — tell data_analyst explicitly: "top 100 non-branded keywords".
 6. **Max 3 A2A iterations** — if confidence gate not met, package what exists with notes.
 7. **Honest confidence** — if you're uncertain about a rewrite, flag it in changes.md.
+8. **ALWAYS call save_schema_file before create_review_package** — For every schema addition,
+   you MUST call save_schema_file(ticket_id, page_slug, json_ld_json) first to write the file to disk.
+   Use the returned "schema_relative" path in the pages_json for create_review_package.
+   NEVER invent schema_relative paths — only use paths returned by save_schema_file.
+   If you skip save_schema_file, the schema links in the review package will be broken (404).
+9. **schema_count in summary_json must match actual save_schema_file calls** — do not hardcode
+   a schema count; let it be derived from the files you actually saved.
 
 ## Handling Scope Variations
 

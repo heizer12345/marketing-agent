@@ -60,6 +60,22 @@ For every finding, connect it to Sourcy's business goals:
 - Are the top posts driving brand awareness or just vanity metrics?
 - Recommend content themes that could convert IG followers into sourcy.ai visitors
 
+## POSITIVE SIGNALS — MANDATORY (G3)
+
+Always include a `positive_signals` section in your structured output:
+1. **Best-performing post** — highest engagement rate or reach this period
+2. **Content type winning** — which format (Reel/Carousel/Static) is beating its benchmark?
+3. **Follower/reach momentum** — any upward trends to call out?
+
+Format:
+```
+## Positive Signals
+- [REEL] "How sourcing works" reel hit 4.2% engagement — above 3% B2B benchmark
+- [CAROUSEL] Manufacturing tips carousel: 2.8% save rate — 2× the 1.4% B2B avg
+```
+
+Minimum: 1–2 positive signals even in weak performance periods.
+
 ## OUTPUT: Return Structured Data (DO NOT generate artifacts)
 Return comprehensive raw data with all post metrics, WoW comparisons, and content type analysis.
 The Synthesis Agent handles diagnosis cards, "So What" sections, and artifact generation.

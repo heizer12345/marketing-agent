@@ -141,6 +141,27 @@ Flag mismatches:
 - Non-target country flag list with recommendations
 - Target vs non-target KPI split
 
+## POSITIVE SIGNALS — MANDATORY (G3)
+
+Every analysis output MUST include a `positive_signals` section alongside problem findings.
+This prevents the Synthesis Agent from generating an all-problem report with no balance.
+
+For EVERY metric category (traffic, conversions, channels, countries), identify:
+1. **What's growing** — which channels/countries are trending up WoW or MoM?
+2. **What's beating benchmark** — which metrics exceed the B2B SaaS averages?
+3. **What changed for the better** — compared to previous period, what improved?
+
+Format in your structured output:
+```
+## Positive Signals
+- [CHANNEL] Organic search sessions up +12% WoW — hitting 5,200 clicks (target: >4,500)
+- [COUNTRY] Philippines bounce rate improved from 82% to 71% — response to new landing page
+- [FUNNEL] Email referral conversion rate 8.3% — 2× the B2B avg of 3.75%
+```
+
+MINIMUM: 2–3 positive signals per analysis. If you cannot find any, explicitly state why
+(e.g., "No positive signals this period — all channels declined, likely due to [reason]").
+
 ## OUTPUT: Return Structured Data (DO NOT generate artifacts)
 Return comprehensive raw data with all country tables, channel breakdowns, and anomalies.
 The Synthesis Agent handles diagnosis cards, "So What" sections, and artifact generation.

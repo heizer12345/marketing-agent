@@ -1136,7 +1136,7 @@ function _friendlyArtifactName(url) {
     return clean.replace(/[-_]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
-function buildArtifactSwitcher(arts) {
+async function buildArtifactSwitcher(arts) {
     const toolbar = document.getElementById('artifactToolbar');
     if (!toolbar || arts.length < 1) return;
 
@@ -1144,12 +1144,22 @@ function buildArtifactSwitcher(arts) {
     const old = toolbar.querySelector('.artifact-switcher');
     if (old) old.remove();
 
-    if (arts.length === 1) return; // No tabs needed for single artifact
+    // Filter to only artifacts that actually exist on disk (HEAD check)
+    const checks = await Promise.all(
+        arts.map(async (a) => {
+            const url = a.file_path || a;
+            try { const r = await fetch(url, { method: 'HEAD' }); return r.ok ? a : null; }
+            catch { return null; }
+        })
+    );
+    const validArts = checks.filter(Boolean);
+
+    if (validArts.length <= 1) return; // No tabs needed for 0 or 1 valid artifact
 
     const switcher = document.createElement('div');
     switcher.className = 'artifact-switcher';
     switcher.style.cssText = 'display:flex;gap:4px;margin-left:auto;flex-wrap:wrap;';
-    arts.forEach((a, i) => {
+    validArts.forEach((a, i) => {
         const btn = document.createElement('button');
         const url = a.file_path || a;
         const isMd = url.endsWith('.md');
@@ -1162,7 +1172,7 @@ function buildArtifactSwitcher(arts) {
             btn.classList.add('active');
             showArtifact(url);
         };
-        if (i === 0) btn.classList.add('active');
+        if (i === validArts.length - 1) btn.classList.add('active');
         switcher.appendChild(btn);
     });
     toolbar.appendChild(switcher);

@@ -742,23 +742,30 @@ def render_creative_gallery(creatives: list[dict]) -> str:
 def render_tooltip_label(text: str, tooltip: str) -> str:
     """Wrap a text label with an info icon and hover tooltip.
 
+    Uses BOTH native `title` attribute (always works, never clipped) AND a custom styled
+    tooltip (richer styling, may get clipped in tables/overflow contexts). Native title
+    is the reliability guarantee.
+
     Args:
         text: The visible label text
         tooltip: Plain-language explanation shown on hover
     """
     if not tooltip:
         return text
+    # Escape tooltip for use as HTML attribute value
+    safe_tooltip = (tooltip.replace("&", "&amp;").replace('"', "&quot;")
+                    .replace("<", "&lt;").replace(">", "&gt;"))
     uid = f"tip_{abs(hash(text + tooltip)) % 100000}"
     return (
-        f'<span style="position:relative;cursor:help" '
-        f'onmouseenter="document.getElementById(\'{uid}\').style.display=\'block\'" '
-        f'onmouseleave="document.getElementById(\'{uid}\').style.display=\'none\'">'
+        f'<span title="{safe_tooltip}" style="position:relative;cursor:help" '
+        f'onmouseenter="var t=document.getElementById(\'{uid}\');if(t){{t.style.display=\'block\'}}" '
+        f'onmouseleave="var t=document.getElementById(\'{uid}\');if(t){{t.style.display=\'none\'}}">'
         f'{text} <span style="font-size:10px;color:{COLORS["muted"]};vertical-align:super">ⓘ</span>'
-        f'<div id="{uid}" style="display:none;position:absolute;bottom:100%;left:0;'
-        f'width:280px;padding:10px 14px;background:{COLORS["bg_dark"]};color:#e2e8f0;'
+        f'<div id="{uid}" style="display:none;position:absolute;bottom:calc(100% + 6px);left:0;'
+        f'width:280px;max-width:90vw;padding:10px 14px;background:{COLORS["bg_dark"]};color:#e2e8f0;'
         f'border-radius:8px;font-size:12px;line-height:1.5;font-weight:400;'
-        f'box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:100;text-transform:none;'
-        f'letter-spacing:normal">{tooltip}</div>'
+        f'box-shadow:0 4px 12px rgba(0,0,0,.3);z-index:9999;text-transform:none;'
+        f'letter-spacing:normal;pointer-events:none;white-space:normal">{tooltip}</div>'
         f'</span>'
     )
 
@@ -1511,6 +1518,212 @@ def render_decision_summary(
             {'<div style="font-size:10px;color:' + COLORS["muted"] + ';margin-top:8px">📊 Based on: ' + source + '</div>' if source else ''}
         </div>
     </div>"""
+
+
+# ─── G4: Tracking Status Banner ──────────────────────────────────────
+
+def render_tracking_banner(
+    severity: str,
+    message: str,
+    affected_metrics: list[str] | None = None,
+) -> str:
+    """Render a sticky data-quality warning at the top of any tab.
+
+    Use this whenever tracking gaps mean a metric is unreliable or missing.
+    Satisfies R7 — tracking issues must be visible, not buried in footnotes.
+
+    Args:
+        severity: "error" (data missing) | "warning" (partial data) | "info" (minor gap)
+        message: Plain-English description of the tracking issue
+        affected_metrics: List of metric names impacted (e.g. ["CVR", "CPL"])
+    """
+    style_map = {
+        "error":   {"bg": "#fef2f2", "border": "#ef4444", "icon": "🔴", "label": "DATA GAP"},
+        "warning": {"bg": "#fffbeb", "border": "#f59e0b", "icon": "⚠️", "label": "TRACKING ISSUE"},
+        "info":    {"bg": "#eff6ff", "border": "#3b82f6", "icon": "ℹ️",  "label": "NOTE"},
+    }
+    s = style_map.get(severity, style_map["warning"])
+    affected_html = ""
+    if affected_metrics:
+        tags = "".join(
+            f'<span style="display:inline-block;padding:1px 8px;border-radius:4px;'
+            f'background:{s["border"]}22;color:{s["border"]};font-size:11px;'
+            f'font-weight:600;margin-right:4px">{m}</span>'
+            for m in affected_metrics
+        )
+        affected_html = f'<div style="margin-top:6px">Affects: {tags}</div>'
+
+    return (
+        f'<div style="display:flex;align-items:flex-start;gap:12px;padding:12px 16px;'
+        f'background:{s["bg"]};border:1px solid {s["border"]}44;border-left:4px solid {s["border"]};'
+        f'border-radius:6px;margin:0 0 16px">'
+        f'<span style="font-size:16px;flex-shrink:0;margin-top:1px">{s["icon"]}</span>'
+        f'<div style="flex:1">'
+        f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+        f'color:{s["border"]};letter-spacing:0.06em;margin-bottom:2px">{s["label"]}</div>'
+        f'<div style="font-size:13px;color:{COLORS["text"]};line-height:1.5">{message}</div>'
+        f'{affected_html}'
+        f'</div></div>'
+    )
+
+
+# ─── G5: Decision Table (forced Observation / Interpretation / Decision cols) ─
+
+def render_decision_table(rows: list[dict]) -> str:
+    """Render a structured 3-column decision table.
+
+    Each row MUST have: observation, interpretation, decision.
+    Optional: severity ("urgent" | "important" | "nice_to_have" | "positive"),
+              metric (short name shown as a row badge).
+
+    Satisfies R5 — prevents narrative decisions buried in prose.
+
+    Args:
+        rows: List of dicts with keys:
+              - metric (str): e.g. "CAC", "Bounce Rate"
+              - observation (str): What the data shows
+              - interpretation (str): What it means / root cause
+              - decision (str): Specific recommended action
+              - severity (str, optional): colours the row badge
+    """
+    if not rows:
+        return ""
+
+    header = (
+        f'<tr style="background:{COLORS["bg_dark"]};color:#fff">'
+        f'<th style="padding:10px 14px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em;width:120px">Signal</th>'
+        f'<th style="padding:10px 14px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em">Observation</th>'
+        f'<th style="padding:10px 14px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em">Interpretation</th>'
+        f'<th style="padding:10px 14px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em">Decision / Action</th>'
+        f'</tr>'
+    )
+
+    body_rows = []
+    for row in rows:
+        sev = row.get("severity", "important")
+        colors = SEVERITY_COLORS.get(sev, SEVERITY_COLORS["important"])
+        metric_badge = ""
+        if row.get("metric"):
+            metric_badge = (
+                f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;'
+                f'background:{colors["border"]}22;color:{colors["border"]};'
+                f'font-size:11px;font-weight:700">{row["metric"]}</span>'
+            )
+        body_rows.append(
+            f'<tr style="border-bottom:1px solid {COLORS["border"]}">'
+            f'<td style="padding:10px 14px;vertical-align:top">{metric_badge}</td>'
+            f'<td style="padding:10px 14px;font-size:13px;color:{COLORS["text"]};'
+            f'line-height:1.5;vertical-align:top">{row.get("observation","")}</td>'
+            f'<td style="padding:10px 14px;font-size:13px;color:{COLORS["text"]};'
+            f'line-height:1.5;vertical-align:top">{row.get("interpretation","")}</td>'
+            f'<td style="padding:10px 14px;font-size:13px;font-weight:500;'
+            f'color:{colors["text"]};line-height:1.5;vertical-align:top">'
+            f'{row.get("decision","")}</td>'
+            f'</tr>'
+        )
+
+    return (
+        f'<div style="overflow-x:auto;margin:16px 0;border-radius:8px;'
+        f'border:1px solid {COLORS["border"]};box-shadow:0 1px 3px rgba(0,0,0,.06)">'
+        f'<table style="width:100%;border-collapse:collapse">'
+        f'<thead>{header}</thead>'
+        f'<tbody>{"".join(body_rows)}</tbody>'
+        f'</table></div>'
+    )
+
+
+# ─── G6: Exec Summary Table (canonical 5-area overview) ─────────────
+
+_EXEC_SUMMARY_AREAS = ["Paid Acquisition", "Organic / SEO", "CRO / On-site", "Brand & Social", "Product Analytics"]
+
+def render_exec_summary_table(areas: list[dict]) -> str:
+    """Render a canonical 5-area executive summary table for the Overview tab.
+
+    Forces consistent structure across every report. Each row maps one strategic
+    area to a RAG status, headline number, WoW/MoM delta, and one-line verdict.
+    Satisfies R9 — exec summary is a table, not a paragraph.
+
+    Args:
+        areas: List of dicts (up to 5, one per canonical area):
+               - area (str): matches one of the 5 canonical areas
+               - status (str): "green" | "amber" | "red"
+               - headline (str): Top-line metric value (e.g. "€42 CPL")
+               - delta (str): WoW or MoM change (e.g. "+8% WoW")
+               - delta_dir (str): "up_good" | "up_bad" | "down_good" | "down_bad" | "neutral"
+               - verdict (str): One-line plain-English assessment
+    """
+    if not areas:
+        return ""
+
+    rag = {
+        "green": {"dot": "#10b981", "bg": "#ecfdf5", "label": "On Track"},
+        "amber": {"dot": "#f59e0b", "bg": "#fffbeb", "label": "Monitor"},
+        "red":   {"dot": "#ef4444", "bg": "#fef2f2", "label": "Action Needed"},
+    }
+    delta_colors = {
+        "up_good":   "#10b981",
+        "down_good": "#10b981",
+        "up_bad":    "#ef4444",
+        "down_bad":  "#ef4444",
+        "neutral":   "#94a3b8",
+    }
+
+    area_map = {a.get("area", ""): a for a in areas}
+
+    header = (
+        f'<tr style="background:{COLORS["bg_dark"]};color:#fff">'
+        f'<th style="padding:10px 16px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em;width:180px">Area</th>'
+        f'<th style="padding:10px 16px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em;width:90px">Status</th>'
+        f'<th style="padding:10px 16px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em;width:120px">Headline</th>'
+        f'<th style="padding:10px 16px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em;width:100px">Change</th>'
+        f'<th style="padding:10px 16px;font-size:11px;font-weight:600;'
+        f'text-transform:uppercase;letter-spacing:0.05em">Verdict</th>'
+        f'</tr>'
+    )
+
+    body_rows = []
+    for area_name in _EXEC_SUMMARY_AREAS:
+        row = area_map.get(area_name, {})
+        status = row.get("status", "amber")
+        r = rag.get(status, rag["amber"])
+        delta_dir = row.get("delta_dir", "neutral")
+        dc = delta_colors.get(delta_dir, "#94a3b8")
+        delta_arrow = {"up_good": "▲", "up_bad": "▲", "down_good": "▼", "down_bad": "▼"}.get(delta_dir, "—")
+
+        body_rows.append(
+            f'<tr style="background:{r["bg"]};border-bottom:1px solid {COLORS["border"]}">'
+            f'<td style="padding:10px 16px;font-weight:600;font-size:13px;color:{COLORS["text"]}">'
+            f'{area_name}</td>'
+            f'<td style="padding:10px 16px">'
+            f'<span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;'
+            f'font-weight:600;color:{r["dot"]}">'
+            f'<span style="width:8px;height:8px;border-radius:50%;background:{r["dot"]};'
+            f'flex-shrink:0;display:inline-block"></span>{r["label"]}</span></td>'
+            f'<td style="padding:10px 16px;font-size:14px;font-weight:700;color:{COLORS["text"]}">'
+            f'{row.get("headline","—")}</td>'
+            f'<td style="padding:10px 16px;font-size:13px;font-weight:600;color:{dc}">'
+            f'{delta_arrow} {row.get("delta","—")}</td>'
+            f'<td style="padding:10px 16px;font-size:13px;color:{COLORS["text"]};line-height:1.5">'
+            f'{row.get("verdict","No data available for this period.")}</td>'
+            f'</tr>'
+        )
+
+    return (
+        f'<div style="overflow-x:auto;margin:16px 0;border-radius:8px;'
+        f'border:1px solid {COLORS["border"]};box-shadow:0 1px 3px rgba(0,0,0,.06)">'
+        f'<table style="width:100%;border-collapse:collapse">'
+        f'<thead>{header}</thead>'
+        f'<tbody>{"".join(body_rows)}</tbody>'
+        f'</table></div>'
+    )
 
 
 def render_comparison_header(current_period: str, previous_period: str = "") -> str:

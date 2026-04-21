@@ -219,7 +219,7 @@ def get_keyword_weekly_positions(date_range: str = "last_30_days", top_n: int = 
         query = row.get("query", "")
         date_str = row.get("date", "")
         try:
-            dt = _dt.strptime(date_str, "%Y-%m-%d")
+            dt = datetime.strptime(date_str, "%Y-%m-%d")
             iso_week = dt.strftime("%Y-W%V")
         except Exception:
             continue
@@ -237,10 +237,27 @@ def get_keyword_weekly_positions(date_range: str = "last_30_days", top_n: int = 
         w["clicks"] += row.get("clicks", 0)
         w["impressions"] += row.get("impressions", 0)
 
+    # Helper: compute Mon–Sun date labels for an ISO week string like "2026-W11"
+    def _week_labels(iso_week: str) -> dict:
+        try:
+            year_str, w_str = iso_week.split("-W")
+            year, wnum = int(year_str), int(w_str)
+            monday = datetime.strptime(f"{year}-W{wnum:02d}-1", "%G-W%V-%u")
+            sunday = monday + timedelta(days=6)
+            return {
+                "week_start": monday.strftime("%b %d"),   # "Mar 10"
+                "week_end":   sunday.strftime("%b %d"),   # "Mar 16"
+                "week_label": f"{monday.strftime('%b %d')}–{sunday.strftime('%b %d')}",  # "Mar 10–16"
+            }
+        except Exception:
+            return {"week_start": "", "week_end": "", "week_label": iso_week}
+
     # Take top N by total clicks, compute weekly averages
     sorted_keywords = sorted(keywords.values(), key=lambda x: x["total_clicks"], reverse=True)[:top_n]
 
     all_weeks = sorted(set(w for k in sorted_keywords for w in k["weekly"].keys()))
+    # Build a lookup: "2026-W11" → {week_start, week_end, week_label} — used for chart axis labels (R1)
+    week_label_map = {w: _week_labels(w) for w in all_weeks}
 
     results = []
     for kw in sorted_keywords:
@@ -251,8 +268,12 @@ def get_keyword_weekly_positions(date_range: str = "last_30_days", top_n: int = 
             positions = w.get("positions", [])
             avg_pos = round(sum(positions) / len(positions), 1) if positions else None
             positions_over_time.append(avg_pos)
+            labels = week_label_map.get(week, {})
             weekly_list.append({
                 "week": week,
+                "week_start": labels.get("week_start", ""),   # "Mar 10" — use for chart X-axis NOT "W11"
+                "week_end":   labels.get("week_end", ""),     # "Mar 16"
+                "week_label": labels.get("week_label", week), # "Mar 10–16" — use in prose NOT "W11"
                 "avg_position": avg_pos,
                 "clicks": w.get("clicks", 0),
                 "impressions": w.get("impressions", 0),
@@ -278,7 +299,8 @@ def get_keyword_weekly_positions(date_range: str = "last_30_days", top_n: int = 
     start, end = _parse_date_range(date_range)
     return json.dumps({
         "date_range": f"{start} to {end}",
-        "weeks": all_weeks,
+        "weeks": all_weeks,                              # ISO week strings e.g. ["2026-W10", "2026-W11"]
+        "week_labels": [week_label_map[w]["week_label"] for w in all_weeks],  # ["Mar 4–10", "Mar 11–17"] — use these for chart X-axis (R1: no bare W##)
         "keywords": results,
         "improving": [k["query"] for k in results if k["direction"] == "improved"][:10],
         "declining": [k["query"] for k in results if k["direction"] == "declined"][:10],

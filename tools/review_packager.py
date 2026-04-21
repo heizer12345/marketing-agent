@@ -77,9 +77,14 @@ def _make_index_html(ticket_id: str, pages: list[dict], summary: dict) -> str:
     """Generate the review package index.html dashboard."""
     now = datetime.now().strftime("%Y-%m-%d %H:%M")
     page_count = len(pages)
-    schema_count = summary.get("schema_count", 0)
-    patch_count = summary.get("patch_count", 0)
     query = summary.get("original_query", "SEO/AEO/GEO overhaul")
+
+    # Derive counts from actual files on disk — don't trust agent-provided numbers
+    ticket_dir = REVIEWS_OUTPUT_DIR / ticket_id
+    schema_count = len(list((ticket_dir / "schemas").glob("*.json"))) if (ticket_dir / "schemas").exists() else 0
+    patch_count = len(list((ticket_dir / "patches").glob("*.patch"))) if (ticket_dir / "patches").exists() else 0
+
+    ticket_dir = REVIEWS_OUTPUT_DIR / ticket_id
 
     rows = []
     for p in pages:
@@ -101,11 +106,12 @@ def _make_index_html(ticket_id: str, pages: list[dict], summary: dict) -> str:
             f'<td>{score_after}</td>',
         ]
         links = []
-        if diff_link:
+        # Only add links for files that actually exist on disk
+        if diff_link and (ticket_dir / diff_link).exists():
             links.append(f'<a href="{diff_link}">diff</a>')
-        if patch_link:
+        if patch_link and (ticket_dir / patch_link).exists():
             links.append(f'<a href="{patch_link}">patch</a>')
-        if schema_link:
+        if schema_link and (ticket_dir / schema_link).exists():
             links.append(f'<a href="{schema_link}">schema</a>')
         row_cells.append(f'<td>{" · ".join(links)}</td>')
         rows.append(f'<tr>{"".join(row_cells)}</tr>')
@@ -286,6 +292,22 @@ def create_review_package(
     for subdir in ("original", "proposed", "diffs", "patches", "files", "schemas"):
         (ticket_dir / subdir).mkdir(parents=True, exist_ok=True)
 
+    # Hard-fail guard: if pages claim schema_relative but no schema files exist on disk,
+    # the agent skipped save_schema_file. Reject with a clear error so the agent retries.
+    claimed_schemas = [p.get("schema_relative") for p in pages if p.get("schema_relative")]
+    existing_schemas = list((ticket_dir / "schemas").glob("*.json")) if (ticket_dir / "schemas").exists() else []
+    if claimed_schemas and not existing_schemas:
+        return json.dumps({
+            "error": (
+                f"Agent claimed {len(claimed_schemas)} schemas in pages_json but no .json files exist in "
+                f"{ticket_dir}/schemas/. You MUST call save_schema_file(ticket_id, page_slug, json_ld_json) "
+                f"for each schema BEFORE calling create_review_package. Use the returned 'schema_relative' "
+                f"path from save_schema_file in your pages_json — never invent paths."
+            ),
+            "claimed_schemas": claimed_schemas[:5],
+            "existing_files": [],
+        })
+
     # index.html
     index_html = _make_index_html(ticket_id, pages, summary)
     (ticket_dir / "index.html").write_text(index_html, encoding="utf-8")
@@ -296,7 +318,7 @@ def create_review_package(
 
     # Count existing artifacts
     patch_count = len(list((ticket_dir / "patches").glob("*.patch")))
-    schema_count = len(list((ticket_dir / "schemas").glob("*.json")))
+    schema_count = len(existing_schemas)
     diff_count = len(list((ticket_dir / "diffs").glob("*.html")))
 
     review_url = f"/reviews/{ticket_id}/index.html"
