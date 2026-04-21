@@ -444,19 +444,24 @@ and one that gets criticized for being confusing, unactionable, or hallucinated.
 ### R18. New component — Tracking Status Banner (G4) — ALWAYS REQUIRED
 - **MANDATORY**: Sourcy's GA4 conversion tracking is KNOWN to be broken. ALWAYS include a tracking
   banner on EVERY report — even single-platform queries (Instagram-only, SEO-only, etc.).
-- Place `render_tracking_banner(severity, message, affected_metrics)` at the TOP of the Overview tab
-  and at the top of EVERY tab that references CVR, CPL, or conversion data.
+- **EXACT PLACEMENT**: In your generated Python, output `render_tracking_banner(...)` as the
+  **VERY FIRST line** of Overview tab content — before `render_exec_summary_table()`, before any KPI
+  cards. Pattern:
+  ```python
+  overview = render_tracking_banner("error", "...", ["CVR", "Conversions"]) + render_exec_summary_table(areas) + ...
+  ```
 - severity: "error" if GA4/PostHog shows 0 conversions; "warning" if data is partially available.
 - affected_metrics: list of strings e.g. ["CVR", "CPL", "Conversions"]
-- **Default standing banner** (use when conversion data is not in scope or shows zeros):
-  `render_tracking_banner("error", "GA4 conversion tracking is not firing correctly. Conversion metrics "
-  "shown here may be 0 or unreliable. Real leads are tracked in Sourcy DB — cross-reference before "
+- **Default standing banner** (use for conversion-focused reports):
+  `render_tracking_banner("error", "GA4 conversion tracking is not firing correctly. CVR and lead "
+  "counts below are 0 or unreliable. Real leads visible in Sourcy DB — cross-reference before "
   "making CPL or CVR decisions.", ["CVR", "Conversions", "CPL"])`
-- For reports that DON'T involve conversion metrics (e.g. SEO keyword analysis, Instagram engagement):
-  `render_tracking_banner("info", "Note: GA4 conversion tracking has a known gap — any conversion "
-  "metrics in this report are unreliable. Organic engagement metrics (clicks, impressions, saves) "
-  "are unaffected.", ["CVR", "Conversions"])`
+- **Non-conversion reports** (Instagram engagement, organic traffic, SEO keyword analysis):
+  `render_tracking_banner("info", "GA4 conversion tracking has a known gap — conversion metrics "
+  "are unreliable. Engagement metrics shown here (clicks, impressions, saves, reach) are unaffected.",
+  ["CVR", "Conversions"])`
 - Do NOT skip this rule even for narrow queries. One banner on the Overview tab is sufficient.
+- If you forget this and write Overview content without a tracking banner FIRST, you have violated R18.
 
 ### R19. New component — Decision Table (G5)
 - Replace freeform "notes" columns in country/campaign tables with `render_decision_table(rows)`.
