@@ -1363,7 +1363,11 @@ def render_action_item(
         verification: How to verify it worked
         time_estimate: Time to complete (e.g., "~10 minutes")
     """
-    # Priority badge color
+    # Priority badge color — coerce to int in case LLM passes a string like "720"
+    try:
+        priority_score = int(priority_score) if priority_score is not None else 0
+    except (TypeError, ValueError):
+        priority_score = 0
     if priority_score >= 500:
         pri_color, pri_label = COLORS["danger"], "⚡ High Priority"
     elif priority_score >= 200:
