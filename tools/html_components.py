@@ -1717,7 +1717,7 @@ def render_exec_summary_table(areas: list[dict]) -> str:
         )
 
     return (
-        f'<div style="overflow-x:auto;margin:16px 0;border-radius:8px;'
+        f'<div id="exec-summary" style="overflow-x:auto;margin:16px 0;border-radius:8px;'
         f'border:1px solid {COLORS["border"]};box-shadow:0 1px 3px rgba(0,0,0,.06)">'
         f'<table style="width:100%;border-collapse:collapse">'
         f'<thead>{header}</thead>'
