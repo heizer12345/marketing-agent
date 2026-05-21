@@ -16,6 +16,7 @@ from skills.prompts import (
     SOURCY_BUSINESS_CONTEXT, TARGET_COUNTRIES_BLOCK,
     ROOT_CAUSE_REASONING, DIAGNOSTIC_OUTPUT_STANDARD, SO_WHAT_INSTRUCTIONS,
     SIMPLE_LANGUAGE_RULES, MESSAGE_ALIGNMENT_FRAMEWORK, CHANNEL_CONTROLLABILITY_RULES,
+    SUGGESTED_ACTIONS_SENTINEL,
 )
 import config
 
@@ -602,11 +603,22 @@ Only include tabs for data that was actually provided. Common tabs:
     Show the score and label: Quick Win / Medium / Long-term.
 15. **Show data source conflicts** — If two sources disagree (GA4 vs DB, Search Console vs SEMrush),
     show BOTH with an explanation. Use render_diagnosis_card with severity="cross_skill".
+
+## CHAT RESPONSE FORMAT (in addition to building the HTML artifact)
+
+After execute_report_script returns, your chat response must:
+1. Be 1–2 sentences naming what the user will see.
+2. Include the artifact URL returned by execute_report_script.
+3. Append a SUGGESTED_ACTIONS sentinel block (see below). The frontend ActionBar
+   reads this and renders one button per action. These are the user's next-step
+   options derived from your findings.
+
+{SUGGESTED_ACTIONS_SENTINEL}
 """
 
 synthesis_agent = Agent(
     name="Synthesis Agent",
     instructions=INSTRUCTIONS,
     tools=[execute_report_script],
-    model="gpt-5.1",  # Large context — receives all skill outputs before code-gen (50K+ tokens)
+    model="gpt-5.5",  # Large context — receives all skill outputs before code-gen (50K+ tokens)
 )

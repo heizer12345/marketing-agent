@@ -152,5 +152,5 @@ geo_content_analyst = Agent(
         check_chatgpt_mention,
         analyze_structured_data,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

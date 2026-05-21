@@ -9,6 +9,12 @@ reference/
 !config/target_markets.json
 !config/competitors.json
 !package.json
+!frontend/package.json
+!frontend/package-lock.json
+!skills-lock.json
+frontend/.next/
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
 output/reports/*.html
 public/reports/*.html
 public/content/

@@ -25,6 +25,8 @@ from agents.run_error_handlers import RunErrorHandlerResult
 from agents.stream_events import AgentUpdatedStreamEvent, RawResponsesStreamEvent, RunItemStreamEvent
 from openai.types.responses import ResponseTextDeltaEvent
 
+from app.streaming_events import StreamTracker
+
 
 # ─── Error Handler for Graceful Degradation ──────────────────────────
 
@@ -150,6 +152,9 @@ app.include_router(login_router)
 
 from app.prompts_api import router as prompts_router  # noqa: E402
 app.include_router(prompts_router)
+
+from app.v2_api import router as v2_router  # noqa: E402
+app.include_router(v2_router)
 
 _has_ga4 = bool(config.GA4_PROPERTY_ID)
 _has_sc = bool(config.SEARCH_CONSOLE_SITE_URL)
@@ -446,12 +451,18 @@ def _detect_all_artifacts(text: str, created_after: float = 0) -> list:
             urls.append(url)
 
     if text:
-        # HTML reports (report_, blog_, landing-page_, brief_, build_ timestamp patterns)
-        for m in re.finditer(r'((?:report|blog|landing-page|brief|build)_[a-zA-Z0-9_-]*\d{8}_\d{6}\.html)', text):
+        # HTML reports (report_, blog_, landing-page_, brief_, build_, ad_, case-study_ timestamp patterns)
+        for m in re.finditer(r'((?:report|blog|landing-page|brief|build|ad|case-study)_[a-zA-Z0-9_-]*\d{8}_\d{6}\.html)', text):
             _add(f"/reports/{m.group(1)}")
         if not urls:
             for m in re.finditer(r'(/reports/[a-zA-Z0-9_-]+\.html)', text):
                 _add(m.group(1))
+
+        # Generated images — link these to the ticket so the Library can show which
+        # session created each image, and the Chat tab can show all images
+        # produced inside a session.
+        for m in re.finditer(r'(/content/images/[a-zA-Z0-9_.-]+\.(?:png|jpe?g|webp|svg))', text):
+            _add(m.group(1))
 
         # Review packages — URL style: /reviews/<ticket_id>/index.html
         for m in re.finditer(r'/reviews/([a-zA-Z0-9_-]+)/index\.html', text):
@@ -483,7 +494,7 @@ def _detect_content_files(text: str) -> list:
         return []
     # Match both old output/content/... and new public/content/... paths
     matches = re.findall(
-        r'(?:public|output)/content/(blogs|audits|briefs|landing-pages)/([a-zA-Z0-9_-]+\.md)',
+        r'(?:public|output)/content/(blogs|audits|briefs|landing-pages|ads|case-studies)/([a-zA-Z0-9_-]+\.md)',
         text
     )
     # Deduplicate while preserving order
@@ -604,6 +615,11 @@ async def _run_agent_stream(
     Run master_agent with streaming, timeout, and retry.
     Returns the full text output.
     Sends stream events to _ws_send.
+
+    Emits BOTH the legacy flat events (stream_start, stream_delta, agent_switch,
+    tool_status, tool_done, stream_end) AND the new structured events
+    (planner_started, subagent_started, subagent_delta, subagent_finished,
+    artifact_chunk, artifact_complete) for the Next.js frontend.
     """
     if task_label:
         await _ws_send({"type": "tool_status", "label": f"▶ {task_label}"})
@@ -611,6 +627,13 @@ async def _run_agent_stream(
     max_retries = 2
     current_agent = "Marketing Analyst"
     turn_count = 0
+
+    # Pull the latest user prompt for the structured planner event.
+    _user_prompt = ""
+    for _m in reversed(messages):
+        if isinstance(_m, dict) and _m.get("role") == "user":
+            _user_prompt = str(_m.get("content", ""))[:2000]
+            break
 
     async def _run_once():
         nonlocal current_agent, turn_count
@@ -622,8 +645,10 @@ async def _run_agent_stream(
 
         full_text = ""
         stop_keepalive = asyncio.Event()
+        tracker = StreamTracker(_ws_send, user_prompt=_user_prompt)
 
         await _ws_send({"type": "stream_start", "agent": current_agent})
+        await tracker.planner_started(current_agent)
 
         async def keepalive():
             while not stop_keepalive.is_set():
@@ -650,6 +675,7 @@ async def _run_agent_stream(
                                 "type": "agent_switch",
                                 "agent": current_agent,
                             })
+                            await tracker.on_agent_switch(current_agent)
 
                 elif isinstance(event, RawResponsesStreamEvent):
                     raw = event.data
@@ -658,6 +684,7 @@ async def _run_agent_stream(
                         if delta:
                             full_text += delta
                             await _ws_send({"type": "stream_delta", "data": delta})
+                            await tracker.on_delta(delta)
 
                 elif isinstance(event, RunItemStreamEvent):
                     item = event.item
@@ -697,6 +724,13 @@ async def _run_agent_stream(
             if fallback_arts:
                 final_output = f"Analysis complete. Generated {len(fallback_arts)} artifact(s):\n" + "\n".join(f"- {a}" for a in fallback_arts)
                 log.info(f"[{ticket_id[:8]}] Using fallback output from detected artifacts")
+
+        # Emit structured events for the new frontend.
+        try:
+            await tracker.finish_open_subagents()
+            await tracker.emit_artifact(final_output)
+        except Exception as e:
+            log.warning(f"[{ticket_id[:8]}] StreamTracker tail emit failed: {e}")
 
         return final_output
 

@@ -713,6 +713,64 @@ Include:
 """
 
 
+STRUCTURED_FINDINGS_SENTINEL = """
+## Structured Findings Block (REQUIRED for sub-agents)
+
+At the END of your output, append a structured findings block — this lets the
+orchestrator emit clean citations and lets generation skills consume your
+findings by ID instead of re-parsing prose. Use exactly this format:
+
+<<<FINDINGS_JSON>>>
+[
+  {"finding_id": "F1", "claim": "<one-sentence claim>", "evidence": "<short evidence>", "confidence": "High|Medium|Low", "tags": ["seo","content_gap"]},
+  {"finding_id": "F2", "claim": "...", "evidence": "...", "confidence": "...", "tags": ["..."]}
+]
+<<<END_FINDINGS_JSON>>>
+
+Rules:
+- finding_id is sequential within this run: F1, F2, F3...
+- One claim per finding. Keep claim under 25 words.
+- Confidence reflects how well your evidence supports the claim.
+- Tags are short slugs that downstream generation skills can filter on
+  (e.g., "winning_angle", "content_gap", "icp_segment", "underserved_market").
+- This block does NOT replace your normal output — append it at the very end.
+- If you have nothing structured to emit, append `<<<FINDINGS_JSON>>>[]<<<END_FINDINGS_JSON>>>`.
+"""
+
+
+SUGGESTED_ACTIONS_SENTINEL = """
+## Suggested Actions Block (REQUIRED for synthesis / final-artifact agents)
+
+After your artifact is complete, append a suggested-actions block. The frontend
+ActionBar reads this and renders one button per action. Only suggest actions
+that the findings actually support — empty array is fine.
+
+<<<SUGGESTED_ACTIONS>>>
+[
+  {
+    "label": "<imperative, under 50 chars>",
+    "action_id": "<one of: gen-blog, gen-ad, gen-landing-page, gen-case-study>",
+    "finding_refs": ["F3", "F7"],
+    "agent_refs": ["A", "C"]
+  }
+]
+<<<END_SUGGESTED_ACTIONS>>>
+
+Action triggers:
+- Found a content gap or untapped keyword cluster → action_id: "gen-blog"
+- Found a winning ad angle, top-CTR creative pattern, or copy theme → action_id: "gen-ad"
+- Found an underserved ICP segment or new market opportunity → action_id: "gen-landing-page"
+- Found a strong customer outcome or proof point → action_id: "gen-case-study"
+
+Rules:
+- 0–5 actions max. Prefer fewer, sharper suggestions over a dump.
+- label is what the user clicks. Lead with verb. Reference the specific opportunity ("Generate blog on 'find suppliers in Vietnam'").
+- finding_refs are the F-IDs (from FINDINGS_JSON blocks emitted upstream) that justify the action.
+- agent_refs are the sub-agent letters (A, B, C…) whose work feeds the generation.
+- If no actions apply, emit `<<<SUGGESTED_ACTIONS>>>[]<<<END_SUGGESTED_ACTIONS>>>`.
+"""
+
+
 REASONING_EXPLANATION = """
 ## Reasoning Explanation (MANDATORY for all agents)
 

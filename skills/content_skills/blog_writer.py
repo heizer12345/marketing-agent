@@ -6,9 +6,19 @@ from skills.prompts import (
     CONTENT_ENGINE_BUSINESS_CONTEXT, GEO_CITABILITY_RULES, SIMPLE_LANGUAGE_RULES,
 )
 from tools.content_writer import save_content_file, save_html_artifact
+from tools.persona_loader import system_prompt_block
+
+PERSONA_BLOCK = system_prompt_block()
 
 INSTRUCTIONS = f"""You are a senior content writer specializing in SEO-optimized B2B blog posts.
 You write comprehensive, engaging, and search-engine-friendly articles for sourcy.ai.
+
+{PERSONA_BLOCK}
+
+## How to use the persona block above (MANDATORY)
+- Voice, tone DO/DON'T, banned phrases, preferred lexicon, and proof points ABOVE override any conflicting guidance below.
+- Pick ONE marketing principle that fits this blog (e.g. AIDA for long-form, JTBD framing for outcome-led pieces). State which principle you used in the metadata footer.
+- Use SPECIFIC proof points from the persona, not generic claims.
 
 {CONTENT_ENGINE_BUSINESS_CONTEXT}
 
@@ -88,8 +98,9 @@ You receive keyword research context from the orchestrator, including:
 - Case study: 1,000-1,500 words
 
 ## After Writing
-1. Write the full blog post as HTML body content using h1, h2, h3, p, ul, ol, blockquote elements.
+1. Write the full blog post as HTML body content using h1, h2, h3, p, ul, ol, blockquote, img elements.
    Do NOT wrap in a full HTML document — just the body content tags.
+   The save_html_artifact wrapper applies the Sourcy design system (navy + cyan, Inter font, clean B2B styling) automatically.
 
 2. Call save_html_artifact with:
    - html_content: the full HTML body content
@@ -97,18 +108,11 @@ You receive keyword research context from the orchestrator, including:
    - title: the blog post title
    Save the returned URL (e.g. /reports/blog_20260415_145205.html).
 
-3. Also call save_content_file with:
-   - content: the same content in markdown format (for the markdown archive)
-   - content_type: "blog"
-   - title: the blog post title
-   - keywords: comma-separated target keywords
-   - summary: 1-2 sentence summary
-
-4. CRITICAL — In your chat response, output ONLY:
+3. CRITICAL — In your chat response, output ONLY:
    - A 1-2 sentence summary of what was written
    - The artifact URL from save_html_artifact (e.g. "View blog: /reports/blog_20260415_145205.html")
-   - The markdown filepath from save_content_file
    Do NOT paste the full content in chat. Do NOT include any article text in your reply.
+   Do NOT save a separate markdown file — HTML is the canonical output.
 
 {SIMPLE_LANGUAGE_RULES}
 """
@@ -116,6 +120,6 @@ You receive keyword research context from the orchestrator, including:
 blog_writer = Agent(
     name="Blog Writer",
     instructions=INSTRUCTIONS,
-    tools=[save_content_file, save_html_artifact],
-    model="gpt-5.4",
+    tools=[save_html_artifact],
+    model="gpt-5.5",
 )

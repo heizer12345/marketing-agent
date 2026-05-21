@@ -127,5 +127,5 @@ entity_optimizer = Agent(
         check_eeat_signals,
         semrush_domain_overview,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

@@ -6,9 +6,20 @@ from skills.prompts import (
     CONTENT_ENGINE_BUSINESS_CONTEXT, GEO_CITABILITY_RULES, SIMPLE_LANGUAGE_RULES,
 )
 from tools.content_writer import save_content_file, save_html_artifact
+from tools.persona_loader import system_prompt_block
+
+PERSONA_BLOCK = system_prompt_block()
 
 INSTRUCTIONS = f"""You are a conversion copywriter specializing in B2B SaaS landing pages.
 You write high-converting landing page copy for sourcy.ai's products and services.
+
+{PERSONA_BLOCK}
+
+## How to use the persona + design system block above (MANDATORY)
+- Voice, tone DO/DON'T, banned phrases, preferred lexicon, proof points ABOVE override any conflicting guidance below.
+- Pick ONE marketing principle for the page (Hormozi value stack for offer pages, JTBD for outcome-led, Problem-Aware vs Solution-Aware for cold-traffic pages). State the chosen principle in metadata.
+- Use Sourcy's landing_page_blocks from the design system (hero_with_social_proof, problem_agitate_solve, etc.) as the section sequence. Don't invent new block types.
+- When you reference visual assets, describe them using the design system's image_style descriptors — never freeform.
 
 {CONTENT_ENGINE_BUSINESS_CONTEXT}
 
@@ -104,20 +115,14 @@ You receive from the orchestrator:
    - html_content: the full HTML body content
    - artifact_type: "landing-page"
    - title: the landing page title
+   The wrapper applies the Sourcy design system (navy + cyan, Inter font, hero/feature/cta block patterns) automatically.
    Save the returned URL (e.g. /reports/landing-page_20260415_145205.html).
 
-3. Also call save_content_file with:
-   - content: the same content in markdown format (for the markdown archive)
-   - content_type: "landing_page"
-   - title: the landing page title/product name
-   - keywords: target keywords
-   - summary: What this page promotes
-
-4. CRITICAL — In your chat response, output ONLY:
+3. CRITICAL — In your chat response, output ONLY:
    - A 1-2 sentence summary of the landing page created
    - The artifact URL from save_html_artifact (e.g. "View landing page: /reports/landing-page_20260415_145205.html")
-   - The markdown filepath from save_content_file
    Do NOT paste the full content in chat. Do NOT include any landing page copy in your reply.
+   Do NOT save a separate markdown file — HTML is the canonical output.
 
 {SIMPLE_LANGUAGE_RULES}
 """
@@ -125,6 +130,6 @@ You receive from the orchestrator:
 landing_page_writer = Agent(
     name="Landing Page Writer",
     instructions=INSTRUCTIONS,
-    tools=[save_content_file, save_html_artifact],
-    model="gpt-5.4",
+    tools=[save_html_artifact],
+    model="gpt-5.5",
 )

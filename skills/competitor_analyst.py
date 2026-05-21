@@ -159,5 +159,5 @@ competitor_skill_agent = Agent(
         semrush_backlinks_overview,
         semrush_traffic_summary,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

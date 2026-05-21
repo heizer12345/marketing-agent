@@ -10,6 +10,7 @@ from agents import Agent
 from tools.artifact_generator import execute_report_script
 from skills.prompts import (
     CONTENT_ENGINE_BUSINESS_CONTEXT, TARGET_COUNTRIES_BLOCK, SIMPLE_LANGUAGE_RULES,
+    SUGGESTED_ACTIONS_SENTINEL,
 )
 
 INSTRUCTIONS = f"""You are the Content Synthesis Agent for sourcy.ai. You receive analysis findings
@@ -186,11 +187,21 @@ crawler_table = render_sortable_table(
 8. **Only use data from DATA** — Never fabricate numbers
 9. Your script must set RESULT_HTML at the end
 10. Chart functions return (html, js) tuples — collect both
+
+## CHAT RESPONSE FORMAT (in addition to building the HTML artifact)
+
+After execute_report_script returns, your chat response must:
+1. Be 1–2 sentences naming what the user will see.
+2. Include the artifact URL.
+3. Append a SUGGESTED_ACTIONS sentinel block — the frontend ActionBar renders
+   one button per action. Suggest generation actions justified by your findings.
+
+{SUGGESTED_ACTIONS_SENTINEL}
 """
 
 content_synthesis_agent = Agent(
     name="Content Synthesis Agent",
     instructions=INSTRUCTIONS,
     tools=[execute_report_script],
-    model="gpt-5.1",  # Large context — receives all skill outputs before code-gen (50K+ tokens)
+    model="gpt-5.5",  # Large context — receives all skill outputs before code-gen (50K+ tokens)
 )

@@ -91,5 +91,5 @@ knowledge_expert_agent = Agent(
         semrush_domain_overview, semrush_competitor_keywords,
         semrush_keyword_research, semrush_find_competitors,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

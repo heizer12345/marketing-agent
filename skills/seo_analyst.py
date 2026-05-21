@@ -300,5 +300,5 @@ seo_skill_agent = Agent(
         semrush_keyword_gap,
         semrush_backlinks_overview,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

@@ -157,5 +157,5 @@ geo_aeo_skill_agent = Agent(
         get_organic_keywords,
         semrush_keyword_research,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

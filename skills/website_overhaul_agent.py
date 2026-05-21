@@ -9,7 +9,7 @@ and knowledge_expert to:
 5. Package for human review (review_packager → pending_review status)
 
 Routes: "implement/rewrite/overhaul/audit+fix/improve + page/homepage/blog/schema/FAQ/SEO/GEO/AEO"
-Model: gpt-5.1 (large context window for multi-round accumulation)
+Model: gpt-5.5 (large context window for multi-round accumulation)
 
 Never auto-applies changes — all output saved to public/reviews/<ticket_id>/.
 """

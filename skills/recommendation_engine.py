@@ -377,5 +377,5 @@ recommendation_engine = Agent(
         get_recent_leads,
         get_activation_dropoffs,
     ] + _google_ads_tools,
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

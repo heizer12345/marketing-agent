@@ -110,5 +110,5 @@ seo_content_analyst = Agent(
         semrush_keyword_research,
         analyze_structured_data,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

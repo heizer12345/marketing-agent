@@ -275,5 +275,5 @@ traffic_skill_agent = Agent(
         + _ads_tools
         + _posthog_tools
     ),
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

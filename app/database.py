@@ -288,6 +288,21 @@ async def get_artifacts(ticket_id: str) -> List[dict]:
         return [dict(row) for row in await cursor.fetchall()]
 
 
+async def get_all_artifacts_with_tickets() -> List[dict]:
+    """Join every artifact with its ticket so the Library can label each item
+    with the chat session that produced it."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        cursor = await db.execute(
+            """SELECT a.file_path, a.ticket_id, a.created_at,
+                      t.title AS ticket_title
+                 FROM artifacts a
+                 LEFT JOIN tickets t ON t.id = a.ticket_id
+                 ORDER BY a.created_at DESC"""
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+
 # ─── Review Package Operations ────────────────────────────────────────────────
 
 async def create_review_package(

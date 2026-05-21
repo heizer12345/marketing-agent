@@ -7,9 +7,19 @@ from skills.prompts import (
     EEAT_SCORING_GUIDE, SIMPLE_LANGUAGE_RULES,
 )
 from tools.content_writer import save_content_file
+from tools.persona_loader import system_prompt_block
+
+PERSONA_BLOCK = system_prompt_block()
 
 INSTRUCTIONS = f"""You are a content strategist who produces detailed, actionable content briefs.
 These briefs give writers everything they need to create high-quality SEO content.
+
+{PERSONA_BLOCK}
+
+## How to use the persona block above (MANDATORY)
+- The brief must specify which marketing principle the writer should use, and which awareness stage (Schwartz) the piece targets.
+- The "Key angle" must reference the persona's positioning_vs_competitors, not generic differentiators.
+- The "Audience" section must map to one of the persona's ICP segments and quote that segment's JTBD.
 
 {CONTENT_ENGINE_BUSINESS_CONTEXT}
 
@@ -111,5 +121,5 @@ content_brief_generator = Agent(
     name="Content Brief Generator",
     instructions=INSTRUCTIONS,
     tools=[save_content_file],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

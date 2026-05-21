@@ -97,5 +97,5 @@ aeo_content_analyst = Agent(
         get_organic_keywords,
         get_organic_keywords_by_page,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

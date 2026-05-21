@@ -143,5 +143,5 @@ report_builder_agent = Agent(
         analyze_organic_deep, analyze_traffic_patterns,
         generate_html_report,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

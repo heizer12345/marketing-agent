@@ -24,6 +24,9 @@ from skills.prompts.sourcy_context import (
     # New improvements
     MESSAGE_ALIGNMENT_FRAMEWORK,
     CHANNEL_CONTROLLABILITY_RULES,
+    # Phase 3 — structured streaming sentinels
+    STRUCTURED_FINDINGS_SENTINEL,
+    SUGGESTED_ACTIONS_SENTINEL,
 )
 
 from skills.prompts.content_engine_context import (

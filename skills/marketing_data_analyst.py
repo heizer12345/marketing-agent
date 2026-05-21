@@ -180,5 +180,5 @@ marketing_data_analyst = Agent(
             ),
         ),
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

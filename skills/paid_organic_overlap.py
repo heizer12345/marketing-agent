@@ -128,5 +128,5 @@ paid_organic_overlap_agent = Agent(
          semrush_domain_overview, semrush_competitor_keywords]
         + _ads_tools
     ),
-    model="gpt-5.4-mini",
+    model="gpt-5.5-mini",
 )

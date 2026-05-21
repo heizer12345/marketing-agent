@@ -23,15 +23,30 @@ from skills.content_skills.landing_page_writer import landing_page_writer
 from skills.content_skills.content_brief_generator import content_brief_generator
 from skills.content_skills.content_quality_scorer import content_quality_scorer
 from skills.content_skills.content_synthesis_agent import content_synthesis_agent
+from skills.content_skills.ad_writer import ad_writer
+from skills.content_skills.case_study_writer import case_study_writer
 from skills.marketing_data_analyst import marketing_data_analyst
 
 from skills.prompts import (
     CONTENT_ENGINE_BUSINESS_CONTEXT, CONTENT_CROSS_AGENT_TRIGGERS,
 )
+from tools.persona_loader import system_prompt_block, list_principles
+
+PERSONA_BLOCK = system_prompt_block()
+_PRINCIPLE_NAMES = ", ".join(p.get("name", "") for p in list_principles()) or "(none loaded)"
 
 INSTRUCTIONS = f"""You are the Content Engine for sourcy.ai. You plan which content skills to call,
 dispatch them in parallel, collect results, and produce either HTML analysis artifacts or
 content files (blogs, landing pages, briefs).
+
+{PERSONA_BLOCK}
+
+## Marketing principle library (available to creation skills)
+{_PRINCIPLE_NAMES}
+
+When dispatching a creation skill (write_blog, write_landing_page, generate_brief), pass along
+which principle from the library best fits the asset. Creation skills will use the principle's
+structure + the persona above to keep outputs on-brand. Never let a creation skill pick "no principle".
 
 {CONTENT_ENGINE_BUSINESS_CONTEXT}
 
@@ -71,6 +86,8 @@ content files (blogs, landing pages, briefs).
 | "Write a blog post about [topic]" | keyword_strategy → write_blog → score_content |
 | "Create landing page for [product]" | keyword_strategy → write_landing_page → score_content |
 | "Content brief for [topic]" | keyword_strategy → generate_brief |
+| "Write ads" / "Generate ad variants" / "Test ad copy" | write_ad_variants (pass channel + findings) |
+| "Write case study" / "Customer story" | write_case_study (pass findings + customer if known) |
 | "Score/evaluate this content" | score_content |
 | "What content should we create?" | analytics_data → keyword_strategy |
 | "Analyze SEO and write blogs" | ALL analysis → content_synthesize_and_build + keyword_strategy → write_blog |
@@ -240,6 +257,22 @@ content_engine = Agent(
                 "structure, EEAT requirements, internal linking plan. Saves to output/content/briefs/."
             ),
         ),
+        ad_writer.as_tool(
+            tool_name="write_ad_variants",
+            tool_description=(
+                "Generate 3 ad variants in parallel — PAS, AIDA, BAB — each with a GPT Image 2 image. "
+                "Inputs: selected_findings (winning angles from analysis), channel (meta/google_search/instagram_story), "
+                "optional subject. Saves to output/content/ads/. Best invoked from synthesis suggested actions."
+            ),
+        ),
+        case_study_writer.as_tool(
+            tool_name="write_case_study",
+            tool_description=(
+                "Generate a case study: hero card (3 numbers + quote) + Before / What we did / After arc, "
+                "with a generated hero image. Inputs: selected_findings (proof points / customer outcomes), "
+                "optional customer_name + industry. Saves to output/content/case-studies/."
+            ),
+        ),
         content_quality_scorer.as_tool(
             tool_name="score_content",
             tool_description=(
@@ -275,5 +308,5 @@ content_engine = Agent(
             ),
         ),
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )

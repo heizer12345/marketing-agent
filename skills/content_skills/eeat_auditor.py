@@ -164,5 +164,5 @@ eeat_auditor = Agent(
         check_eeat_signals,
         analyze_structured_data,
     ],
-    model="gpt-5.4",
+    model="gpt-5.5",
 )
