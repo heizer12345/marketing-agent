@@ -13,11 +13,25 @@ from google.analytics.data_v1beta.types import (
 )
 
 import config
+from tools.google_credentials import GA4_SCOPES, get_service_account_credentials
+
+
+def _ga4_not_configured_message() -> str:
+    if not config.GA4_PROPERTY_ID:
+        return "Error: GA4_PROPERTY_ID is not set in .env"
+    if not config.has_google_credentials():
+        return (
+            "Error: Google service account JSON not found. "
+            f"Expected at {config.google_credentials_path()}"
+        )
+    return ""
 
 
 def _get_client() -> BetaAnalyticsDataClient:
-    """Create a GA4 API client using default credentials."""
-    return BetaAnalyticsDataClient()
+    """Create a GA4 API client using the service account file."""
+    return BetaAnalyticsDataClient(
+        credentials=get_service_account_credentials(GA4_SCOPES)
+    )
 
 
 def _parse_date_range(date_range: str) -> tuple[str, str]:
@@ -52,6 +66,9 @@ def _parse_date_range(date_range: str) -> tuple[str, str]:
 def _run_report(dimensions: list[str], metrics: list[str], date_range: str,
                 order_by_metric: Optional[str] = None, limit: int = 50) -> list[dict]:
     """Run a GA4 report and return rows as dicts."""
+    err = _ga4_not_configured_message()
+    if err:
+        return [{"error": err}]
     client = _get_client()
     property_id = config.GA4_PROPERTY_ID
     start, end = _parse_date_range(date_range)
@@ -98,6 +115,10 @@ def get_website_overview(date_range: str = "last_7_days") -> str:
         date_range: Time period - 'last_7_days', 'last_30_days', 'this_month',
                     'last_month', or 'YYYY-MM-DD:YYYY-MM-DD'.
     """
+    err = _ga4_not_configured_message()
+    if err:
+        return err
+
     # GA4 API limits requests to 10 metrics — split into two batches
     metrics_batch1 = [
         "sessions", "totalUsers", "newUsers", "screenPageViews",

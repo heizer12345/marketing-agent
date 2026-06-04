@@ -18,6 +18,7 @@ CONTENT_TYPES = {
     "landing_page": "landing-pages",
     "ad": "ads",
     "case_study": "case-studies",
+    "calendar": "calendars",
 }
 for _subdir in CONTENT_TYPES.values():
     (CONTENT_OUTPUT_DIR / _subdir).mkdir(parents=True, exist_ok=True)
@@ -385,6 +386,30 @@ def _build_html_template() -> str:
       background: __BG__;
     }
     .variant h3 { margin-top: 0; }
+    .hook {
+      font-size: 1.05rem;
+      font-weight: 600;
+      color: __PRIMARY__;
+      line-height: 1.45;
+      margin: 0.75rem 0 1rem;
+      padding-left: 0.75rem;
+      border-left: 3px solid __ACCENT__;
+    }
+    .cta-line {
+      font-weight: 600;
+      color: __PRIMARY__;
+      margin-top: 1rem;
+      padding: 0.75rem 1rem;
+      background: __BG_ALT__;
+      border-radius: 8px;
+      border: 1px solid __BORDER__;
+    }
+    .variant img {
+      max-width: 100%;
+      border-radius: 10px;
+      margin: 0.75rem 0;
+      border: 1px solid __BORDER__;
+    }
     @media (max-width: 640px) {
       .container { padding: 1.5rem 1.25rem; }
       h1 { font-size: 1.55rem; }

@@ -2,13 +2,50 @@ import type { MemoryState } from "./types";
 
 const API = "/api/v2";
 
+/** Drill-down detail for Home briefing cards (alerts, recommendations). */
+export type BriefingDetail = {
+  cause: string;
+  evidence: string;
+  pages: string[];
+  suggestion: string;
+  next_step: string;
+};
+
+export type BriefingItem = {
+  text: string;
+  severity?: "urgent" | "important" | "info";
+  priority?: "high" | "medium" | "low";
+  source: string;
+  detail?: BriefingDetail;
+};
+
+export type KpiTrendPoint = { date: string; raw_date?: string; value: number };
+export type KpiTrendDriver = { label: string; current: number; previous: number; change_pct: number };
+export type KpiTrendResponse = {
+  kpi_key: string;
+  label: string;
+  source: string;
+  series: KpiTrendPoint[];
+  delta_pct?: number | null;
+  total_current?: number | null;
+  unit?: string;
+  drivers: KpiTrendDriver[];
+  explanation: string;
+  explanation_bullets?: string[];
+  related_insights?: string[];
+  error?: string | null;
+};
+
 async function jsonFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
   const r = await fetch(url, {
     credentials: "include",
     headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
     ...init,
   });
-  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  if (!r.ok) {
+    const restartHint = r.status === 404 ? " Restart the backend: python main.py" : "";
+    throw new Error(`${r.status} ${r.statusText}.${restartHint}`);
+  }
   return r.json();
 }
 
@@ -35,16 +72,20 @@ export const api = {
         generated_at?: number;
         elapsed_seconds?: number;
         kpis: Array<{ label: string; value: string | number; delta_pct?: number; source: string }>;
-        insights: Array<{ text: string; severity: "urgent" | "important" | "info"; source: string }>;
+        insights: Array<{ text: string; severity: "urgent" | "important" | "info"; source: string; detail?: BriefingDetail }>;
         top_movers: Array<{ text: string; kind?: string; source: string }>;
-        alerts: Array<{ text: string; severity: "urgent" | "important" | "info"; source: string }>;
-        recommendations?: Array<{ text: string; priority: "high" | "medium" | "low"; source: string }>;
+        alerts: Array<BriefingItem & { severity: "urgent" | "important" | "info" }>;
+        recommendations?: Array<BriefingItem & { priority: "high" | "medium" | "low" }>;
       };
       dashboard: null | { url: string; generated_at: number; size_kb: number };
       stale: boolean;
       refreshing: boolean;
     }>(`${API}/home/snapshot${force ? "?force=true" : ""}`),
   homeForceRefresh: () => jsonFetch<{ ok: boolean; queued: boolean }>(`${API}/home/refresh`, { method: "POST" }),
+  kpiTrend: (label: string, source: string) =>
+    jsonFetch<KpiTrendResponse>(
+      `${API}/home/kpi-trend?${new URLSearchParams({ label, source })}`,
+    ),
   library: (type: string) =>
     jsonFetch<{
       type: string;

@@ -3,18 +3,17 @@
 from datetime import datetime, timedelta
 from agents import function_tool
 from googleapiclient.discovery import build
-from google.oauth2 import service_account
-
 import config
-
-SCOPES = ["https://www.googleapis.com/auth/webmasters.readonly"]
+from tools.google_credentials import GSC_SCOPES, get_service_account_credentials
 
 
 def _get_service():
     """Create a Search Console API service client."""
-    credentials = service_account.Credentials.from_service_account_file(
-        config.GOOGLE_APPLICATION_CREDENTIALS, scopes=SCOPES
-    )
+    if not config.has_search_console_configured():
+        raise FileNotFoundError(
+            "Search Console not configured — set SEARCH_CONSOLE_SITE_URL and credentials."
+        )
+    credentials = get_service_account_credentials(GSC_SCOPES)
     return build("searchconsole", "v1", credentials=credentials)
 
 

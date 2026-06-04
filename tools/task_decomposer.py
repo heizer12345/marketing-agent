@@ -77,7 +77,36 @@ _FEW_SHOT = [
         "Improve SEO/GEO/AEO of our top 20 blogs with proposed changes",
         '{"is_multi_task":false,"reason":"Single complex implementation task — audit + rewrite + review package","tasks":[{"id":1,"brief":"Improve the SEO, GEO, and AEO of sourcy.ai\'s top 20 blog posts. Audit each, enrich with keywords, rewrite, add schemas, and package all proposed changes for human review.","phase":1,"agent_hint":"implementation"}]}',
     ),
+    (
+        "can you generate the blog?",
+        '{"is_multi_task":false,"reason":"Follow-up blog creation after prior calendar/intake context","tasks":[{"id":1,"brief":"Write the full SEO blog post from the approved calendar row and prior intake answers in this thread. Use keyword_strategy then write_blog then score_content. Return the blog HTML artifact path.","phase":1,"agent_hint":"content_write"}]}',
+    ),
+    (
+        "Write the Day 3 blog from the calendar",
+        '{"is_multi_task":false,"reason":"Execute one approved calendar blog row","tasks":[{"id":1,"brief":"Write the Day 3 blog from the content calendar in this conversation: use its title, angle, and evidence. keyword_strategy → write_blog → score_content. Return artifact path.","phase":1,"agent_hint":"content_write"}]}',
+    ),
 ]
+
+
+def should_skip_decompose(user_message: str, recent_context: str = "") -> bool:
+    """Skip the extra gpt-4o-mini planner call for obvious single-task messages."""
+    low = (user_message or "").lower().strip()
+    combined = f"{recent_context} {low}".lower()
+    multi_signals = (
+        " and ",
+        " also ",
+        " then ",
+        " plus ",
+        "both ",
+        "audit and",
+        "write a blog and",
+        "landing page and",
+    )
+    if any(s in combined for s in multi_signals):
+        return False
+    if low.count("?") > 1:
+        return False
+    return len(low) < 220
 
 
 async def decompose_tasks(user_message: str, recent_context: str = "") -> List[dict]:
@@ -92,6 +121,13 @@ async def decompose_tasks(user_message: str, recent_context: str = "") -> List[d
         A list of task dicts: [{"id": 1, "brief": "...", "phase": 1, "agent_hint": "auto"}]
         Falls back to a single-task list if JSON parsing fails.
     """
+    from tools.context_manager import is_blog_execution_request
+
+    if should_skip_decompose(user_message, recent_context):
+        hint = "content_write" if is_blog_execution_request(user_message, recent_context) else "auto"
+        log.info(f"[decomposer] fast path (skipped LLM), agent_hint={hint}")
+        return [{"id": 1, "brief": user_message, "phase": 1, "agent_hint": hint}]
+
     # Build few-shot messages
     messages = [{"role": "system", "content": _SYSTEM_PROMPT}]
     for user_ex, assistant_ex in _FEW_SHOT:
@@ -120,6 +156,17 @@ async def decompose_tasks(user_message: str, recent_context: str = "") -> List[d
             f"[decomposer] is_multi_task={parsed.get('is_multi_task')} "
             f"reason={parsed.get('reason', '')!r} tasks={len(tasks)}"
         )
+        from tools.context_manager import is_blog_execution_request
+
+        if is_blog_execution_request(user_message, recent_context):
+            for t in tasks:
+                t["agent_hint"] = "content_write"
+                brief = (t.get("brief") or "").strip()
+                if "blog" not in brief.lower():
+                    t["brief"] = (
+                        f"Write the blog post the user requested: {user_message}. "
+                        "Use thread context (calendar, intake). keyword_strategy → write_blog → score_content."
+                    )
         return tasks
     except Exception as e:
         log.warning(f"[decomposer] Falling back to single task. Error: {e}")

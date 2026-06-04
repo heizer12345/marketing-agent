@@ -1,20 +1,23 @@
 "use client";
 
 import { useMemo } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 import { useChatStore } from "@/lib/store";
 import type { Artifact, SubAgent } from "@/lib/types";
 import clsx from "clsx";
+import { ChatMarkdown } from "@/components/chat/ChatMarkdown";
 
-/** Renders artifact markdown with inline citation chips that highlight the
- * matching sub-agent in the Steps rail on click. */
 export function ArtifactCanvas({
   artifact,
   subagents,
+  agentName,
+  activity,
+  embedded = false,
 }: {
   artifact: Artifact;
   subagents: SubAgent[];
+  agentName?: string;
+  activity?: string;
+  embedded?: boolean;
 }) {
   const setActive = useChatStore((s) => s.setActiveCitation);
   const activeCitation = useChatStore((s) => s.activeCitation);
@@ -29,43 +32,80 @@ export function ArtifactCanvas({
     return artifact.markdown.replace(/\[([A-Z]|F\d+)\]/g, "‹CITE:$1›");
   }, [artifact.markdown]);
 
-  return (
-    <article className="card p-7">
-      <div className="flex items-center gap-2 mb-4 pb-3 border-b" style={{ borderColor: "var(--border)" }}>
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center"
-             style={{ background: "linear-gradient(135deg, #0F172A 0%, #1E293B 100%)" }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="w-3.5 h-3.5">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14,2 14,8 20,8"/>
-          </svg>
-        </div>
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-ink">Answer</div>
-          <div className="text-[11px] text-muted">Citations link back to the source agent — click any chip</div>
-        </div>
-        {artifact.complete && <span className="chip chip-emerald">Complete</span>}
-        {artifact.elapsed_seconds != null && (
-          <span className="text-[11px] text-muted font-mono">{artifact.elapsed_seconds.toFixed(1)}s</span>
-        )}
-      </div>
+  const isRunning = !artifact.complete && !!activity;
 
-      <div className="prose-sourcy">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm]}
-          components={{
-            p: ({ children }) => <p>{wrapCitations(children, byLetter, activeCitation, setActive)}</p>,
-            li: ({ children }) => <li>{wrapCitations(children, byLetter, activeCitation, setActive)}</li>,
-            h1: ({ children }) => <h1>{wrapCitations(children, byLetter, activeCitation, setActive)}</h1>,
-            h2: ({ children }) => <h2>{wrapCitations(children, byLetter, activeCitation, setActive)}</h2>,
-            h3: ({ children }) => <h3>{wrapCitations(children, byLetter, activeCitation, setActive)}</h3>,
-            img: ({ src, alt }) => <img src={src as string} alt={alt || ""} />,
-            a: ({ children, href }) => <a href={href} target="_blank" rel="noreferrer">{children}</a>,
-          }}
-        >
-          {transformed}
-        </ReactMarkdown>
-      </div>
-    </article>
+  const mdComponents = useMemo(
+    () => ({
+      p: ({ children }: { children?: React.ReactNode }) => (
+        <p>{wrapCitations(children, byLetter, activeCitation, setActive)}</p>
+      ),
+      li: ({ children }: { children?: React.ReactNode }) => (
+        <li>{wrapCitations(children, byLetter, activeCitation, setActive)}</li>
+      ),
+      h1: ({ children }: { children?: React.ReactNode }) => (
+        <h1>{wrapCitations(children, byLetter, activeCitation, setActive)}</h1>
+      ),
+      h2: ({ children }: { children?: React.ReactNode }) => (
+        <h2>{wrapCitations(children, byLetter, activeCitation, setActive)}</h2>
+      ),
+      h3: ({ children }: { children?: React.ReactNode }) => (
+        <h3>{wrapCitations(children, byLetter, activeCitation, setActive)}</h3>
+      ),
+      img: ({ src, alt }: { src?: string; alt?: string }) => <img src={src} alt={alt || ""} />,
+    }),
+    [byLetter, activeCitation, setActive],
   );
+
+  const body = (
+    <>
+      {(agentName || isRunning || artifact.complete) && (
+        <div className={clsx("flex items-center gap-2 mb-3", !embedded && "pb-3 border-b")} style={{ borderColor: "var(--border)" }}>
+          {!embedded && (
+            <div
+              className="w-7 h-7 rounded-lg flex items-center justify-center"
+              style={{ background: "linear-gradient(135deg, #0F172A 0%, #1E293B 100%)" }}
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="w-3.5 h-3.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <polyline points="14,2 14,8 20,8" />
+              </svg>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-ink">{agentName || "Assistant"}</div>
+            {isRunning && (
+              <div className="text-[11px] text-muted flex items-center gap-1.5 mt-0.5">
+                <span className="status-dot running" />
+                <span className="truncate">{activity}</span>
+              </div>
+            )}
+            {!embedded && subagents.length > 0 && !isRunning && (
+              <div className="text-[11px] text-muted">Click citation chips to see source agents</div>
+            )}
+          </div>
+          {artifact.complete && <span className="chip chip-emerald text-[10px]">Done</span>}
+          {artifact.elapsed_seconds != null && artifact.complete && (
+            <span className="text-[11px] text-muted font-mono">{artifact.elapsed_seconds.toFixed(0)}s</span>
+          )}
+        </div>
+      )}
+
+      <ChatMarkdown markdown={transformed} className="prose-sourcy" components={mdComponents} />
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div
+        className="rounded-2xl rounded-bl-md px-4 py-3 border"
+        style={{ background: "white", borderColor: "var(--border)" }}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return <article className="card p-7">{body}</article>;
 }
 
 function wrapCitations(
@@ -82,7 +122,7 @@ function wrapCitations(
         if (!m) return part;
         const ref = m[1];
         const sub = byLetter[ref];
-        const title = sub ? `Source: ${sub.name} [${ref}] — click to see agent's full output` : `Reference ${ref}`;
+        const title = sub ? `Source: ${sub.name} [${ref}]` : `Reference ${ref}`;
         return (
           <span
             key={i}

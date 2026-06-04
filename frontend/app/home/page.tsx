@@ -1,8 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { api } from "@/lib/api";
+import { api, type BriefingItem } from "@/lib/api";
+import { AttentionCard } from "@/components/home/AttentionCard";
+import { BriefingDetailModal } from "@/components/home/BriefingDetailModal";
+import { KpiTrendModal, type KpiCard } from "@/components/home/KpiTrendModal";
 
 type Snapshot = Awaited<ReturnType<typeof api.homeSnapshot>>["snapshot"];
 type Dashboard = Awaited<ReturnType<typeof api.homeSnapshot>>["dashboard"];
@@ -19,14 +22,27 @@ const SEVERITY_DOT: Record<string, string> = {
   info: "bg-cyan-500",
 };
 
+type HighlightCategory = "attention" | "changed" | "movers";
+type HighlightItem = {
+  id: string;
+  category: HighlightCategory;
+  text: string;
+  severity: string;
+  source: string;
+  detail?: BriefingItem;
+};
+
 export default function HomePage() {
   const [snap, setSnap] = useState<Snapshot | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard>(null);
   const [stale, setStale] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [loadedAt, setLoadedAt] = useState<number | null>(null);
-  // View mode toggle — start in the rich dashboard view if a dashboard exists.
   const [view, setView] = useState<"dashboard" | "summary">("dashboard");
+  const [detailItem, setDetailItem] = useState<BriefingItem | null>(null);
+  const [kpiTrend, setKpiTrend] = useState<KpiCard | null>(null);
+  const [highlightFilter, setHighlightFilter] = useState<"all" | HighlightCategory>("all");
+  const [showAllHighlights, setShowAllHighlights] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -41,36 +57,78 @@ export default function HomePage() {
     }
   }, []);
 
-  // Always load cached data instantly on mount — no blocking.
   useEffect(() => { load(); }, [load]);
 
-  // Poll every 10s while a refresh is running so the dashboard updates as
-  // soon as the background job finishes.
   useEffect(() => {
     if (!refreshing) return;
     const t = setInterval(() => load(), 10000);
     return () => clearInterval(t);
   }, [refreshing, load]);
 
+  useEffect(() => {
+    if (!detailItem) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDetailItem(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [detailItem]);
+
   const onRefresh = async () => {
-    // Fire-and-forget the trigger; immediately reflect "refreshing" state but
-    // keep showing whatever data is currently cached.
     setRefreshing(true);
     try { await api.homeForceRefresh(); } catch { /* network only */ }
-    // Pick up the new snapshot once available — polling above handles it.
   };
 
   const generatedAt = snap?.generated_at ? new Date(snap.generated_at * 1000) : null;
   const insights = snap?.insights ?? [];
   const movers = snap?.top_movers ?? [];
-  const alerts = snap?.alerts ?? [];
+  const alerts = (snap?.alerts ?? []) as BriefingItem[];
   const kpis = snap?.kpis ?? [];
-  const recommendations = (snap as any)?.recommendations ?? [];
+  const recommendations = (snap?.recommendations ?? []) as BriefingItem[];
   const empty = insights.length === 0 && movers.length === 0 && alerts.length === 0 && recommendations.length === 0;
   const erroredOut = snap?.status === "error";
+  const highlights = useMemo<HighlightItem[]>(() => {
+    const attention = alerts.map((a, i) => ({
+      id: `a-${i}`,
+      category: "attention" as const,
+      text: a.text,
+      severity: a.severity || a.priority || "important",
+      source: a.source,
+      detail: a,
+    }));
+    const changed = insights.map((it, i) => ({
+      id: `c-${i}`,
+      category: "changed" as const,
+      text: it.text,
+      severity: it.severity || "info",
+      source: it.source,
+    }));
+    const topMovers = movers.map((m, i) => ({
+      id: `m-${i}`,
+      category: "movers" as const,
+      text: m.text,
+      severity: "info",
+      source: m.source,
+    }));
+    const rank: Record<string, number> = { urgent: 0, important: 1, info: 2 };
+    return [...attention, ...changed, ...topMovers].sort(
+      (a, b) => (rank[a.severity] ?? 3) - (rank[b.severity] ?? 3),
+    );
+  }, [alerts, insights, movers]);
+  const filteredHighlights = useMemo(
+    () =>
+      highlightFilter === "all"
+        ? highlights
+        : highlights.filter((h) => h.category === highlightFilter),
+    [highlightFilter, highlights],
+  );
+  const visibleHighlights = showAllHighlights ? filteredHighlights : filteredHighlights.slice(0, 8);
 
   return (
     <div className="flex-1 overflow-y-auto thin-scroll">
+      <BriefingDetailModal item={detailItem} onClose={() => setDetailItem(null)} />
+      <KpiTrendModal kpi={kpiTrend} onClose={() => setKpiTrend(null)} />
+
       <header className="border-b bg-white/80 backdrop-blur sticky top-0 z-10 px-8 py-5" style={{ borderColor: "var(--border)" }}>
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
@@ -81,12 +139,11 @@ export default function HomePage() {
               {!refreshing && !stale && snap && <span className="chip chip-emerald text-[10px]">Fresh</span>}
             </div>
             <p className="text-[13px] text-muted mt-1">
-              Auto-pilot pulls from all your data sources and surfaces what changed. No clicks needed.
+              Auto-pilot pulls from all your data sources and surfaces what changed. Click a KPI for its trend chart; click any alert for cause, evidence, and next steps.
               {generatedAt && <span> Last run: {generatedAt.toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}.</span>}
             </p>
           </div>
           <div className="flex items-center gap-2">
-            {/* View mode toggle */}
             {dashboard && (
               <div className="inline-flex rounded-lg border" style={{ borderColor: "var(--border)" }}>
                 <button
@@ -120,9 +177,8 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Rich dashboard iframe view — mimics the synthesis_agent's UI */}
       {dashboard && view === "dashboard" && (
-        <div className="flex-1" style={{ minHeight: "calc(100vh - 120px)" }}>
+        <div className="flex-1 relative" style={{ minHeight: "calc(100vh - 120px)" }}>
           <iframe
             src={dashboard.url}
             className="w-full h-full block border-0"
@@ -135,7 +191,6 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* Summary view (also shown when no dashboard exists yet) */}
       {(view === "summary" || !dashboard) && (
       <div className="p-8 max-w-5xl space-y-6">
         {!dashboard && (
@@ -171,16 +226,21 @@ export default function HomePage() {
           </div>
         )}
 
-        {/* KPIs row */}
         {kpis.length > 0 && (
           <section>
             <div className="section-heading">
               <h2>KPIs · last 7 days</h2>
-              <span className="hint">{kpis.length} metrics</span>
+              <span className="hint">Click a metric for daily trend & why it moved</span>
             </div>
-            <div className="grid grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {kpis.map((k, i) => (
-                <div key={i} className="card p-4">
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => setKpiTrend(k)}
+                  className="card p-4 text-left transition-shadow hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/50 cursor-pointer"
+                  title="View 7-day trend chart"
+                >
                   <div className="text-[11px] text-muted">{k.label}</div>
                   <div className="text-xl font-bold text-ink mt-1" style={{ letterSpacing: "-0.02em" }}>{k.value}</div>
                   <div className="flex items-center justify-between mt-1">
@@ -194,72 +254,80 @@ export default function HomePage() {
                     ) : <span />}
                     <span className="text-[10px] text-muted-soft">{k.source}</span>
                   </div>
-                </div>
+                </button>
               ))}
             </div>
           </section>
         )}
 
-        {/* Alerts */}
-        {alerts.length > 0 && (
-          <section>
-            <div className="section-heading">
-              <h2>⚡ Needs attention</h2>
-              <span className="hint">{alerts.length} alert{alerts.length === 1 ? "" : "s"}</span>
+        {highlights.length > 0 && (
+          <section className="card p-4 md:p-5">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div>
+                <h2 className="text-base font-semibold text-ink">Weekly highlights</h2>
+                <p className="text-[12px] text-muted mt-0.5">
+                  Consolidated view of needs attention, changes, and top movers.
+                </p>
+              </div>
+              <div className="inline-flex rounded-lg border" style={{ borderColor: "var(--border)" }}>
+                {[
+                  { id: "all", label: `All (${highlights.length})` },
+                  { id: "attention", label: `Needs attention (${alerts.length})` },
+                  { id: "changed", label: `Changed (${insights.length})` },
+                  { id: "movers", label: `Top movers (${movers.length})` },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      setHighlightFilter(tab.id as any);
+                      setShowAllHighlights(false);
+                    }}
+                    className={clsx(
+                      "px-2.5 py-1.5 text-[11px] md:text-[12px] font-medium transition-colors border-r last:border-r-0",
+                      highlightFilter === tab.id ? "bg-ink text-white" : "text-muted hover:text-ink",
+                    )}
+                    style={{ borderColor: "var(--border)" }}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
             </div>
-            <div className="space-y-2">
-              {alerts.map((a, i) => (
-                <BulletItem key={i} text={a.text} severity={a.severity} source={a.source} />
+
+            <div className="mt-4 space-y-2">
+              {visibleHighlights.map((item) => (
+                <CompactHighlightRow
+                  key={item.id}
+                  item={item}
+                  onOpenDetail={item.detail ? () => setDetailItem(item.detail!) : undefined}
+                />
               ))}
             </div>
+
+            {filteredHighlights.length > 8 && (
+              <div className="mt-3 flex justify-center">
+                <button
+                  className="btn-ghost text-[12px]"
+                  onClick={() => setShowAllHighlights((v) => !v)}
+                >
+                  {showAllHighlights
+                    ? "Show less"
+                    : `Show ${filteredHighlights.length - 8} more`}
+                </button>
+              </div>
+            )}
           </section>
         )}
 
-        {/* Insights */}
-        {insights.length > 0 && (
-          <section>
-            <div className="section-heading">
-              <h2>What changed this week</h2>
-              <span className="hint">Cited insights from your data</span>
-            </div>
-            <div className="space-y-2">
-              {insights.map((it, i) => (
-                <BulletItem key={i} text={it.text} severity={it.severity} source={it.source} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Top movers */}
-        {movers.length > 0 && (
-          <section>
-            <div className="section-heading">
-              <h2>Top movers</h2>
-              <span className="hint">Wins and slips worth noting</span>
-            </div>
-            <div className="space-y-2">
-              {movers.map((m, i) => (
-                <BulletItem key={i} text={m.text} severity="info" source={m.source} />
-              ))}
-            </div>
-          </section>
-        )}
-
-        {/* Recommendations */}
         {recommendations.length > 0 && (
           <section>
             <div className="section-heading">
               <h2>🎯 Recommended next moves</h2>
-              <span className="hint">Cross-channel actions ranked by priority</span>
+              <span className="hint">Click any item for cause, evidence & steps</span>
             </div>
             <div className="space-y-2">
-              {recommendations.map((r: any, i: number) => (
-                <BulletItem
-                  key={i}
-                  text={r.text}
-                  severity={r.priority === "high" ? "urgent" : r.priority === "medium" ? "important" : "info"}
-                  source={r.source}
-                />
+              {recommendations.map((r, i) => (
+                <AttentionCard key={i} item={r} onClick={() => setDetailItem(r)} />
               ))}
             </div>
           </section>
@@ -288,5 +356,43 @@ function BulletItem({ text, severity, source }: { text: string; severity: string
         </div>
       </div>
     </div>
+  );
+}
+
+function CompactHighlightRow({
+  item,
+  onOpenDetail,
+}: {
+  item: HighlightItem;
+  onOpenDetail?: () => void;
+}) {
+  const categoryLabel: Record<HighlightCategory, string> = {
+    attention: "Needs attention",
+    changed: "What changed",
+    movers: "Top mover",
+  };
+  const row = (
+    <div className="card p-3 flex items-start gap-2.5">
+      <span className={clsx("rounded-full mt-1.5 w-2 h-2 shrink-0", SEVERITY_DOT[item.severity] || "bg-slate-300")} />
+      <div className="min-w-0 flex-1">
+        <div className="text-[13px] text-ink leading-snug">{item.text}</div>
+        <div className="text-[10.5px] text-muted mt-1 flex items-center flex-wrap gap-2">
+          <span className={clsx("chip text-[10px]", SEVERITY_CHIP[item.severity] || "chip")}>{item.severity}</span>
+          <span className="chip text-[10px]">{categoryLabel[item.category]}</span>
+          <span>Source: {item.source}</span>
+        </div>
+      </div>
+    </div>
+  );
+  if (!onOpenDetail) return row;
+  return (
+    <button
+      type="button"
+      onClick={onOpenDetail}
+      className="w-full text-left rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-500/40"
+      title="Open cause, evidence & next steps"
+    >
+      {row}
+    </button>
   );
 }

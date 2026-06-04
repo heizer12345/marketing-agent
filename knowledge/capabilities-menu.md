@@ -69,8 +69,29 @@ These crawl pages, audit content quality, and can write content files.
 | **Blog Writer** | "Write a blog post about [topic]" | Full SEO blog with GEO citability blocks, saved to output/content/blogs/ | 3-5 min |
 | **Landing Page Writer** | "Write landing page for [product]" | Conversion-optimized copy with headlines, benefits, CTAs | 3-5 min |
 | **Content Brief Generator** | "Create a brief for [topic]" | Detailed spec for writers with keywords, outline, competitor analysis | 2-3 min |
+| **Social Post Ideator** | "Give me LinkedIn/IG/TikTok post ideas with visuals" | 3 post ideas + generated image for each + artifact URL | 2-4 min |
 
 All content goes through quality scoring (0-100) before delivery. If score < 90, it's revised automatically.
+
+### Content Calendar (content_calendar_planner) — "What should we post this week?"
+
+| Feature | Best for | Output | Time |
+|---------|----------|--------|------|
+| **7-day calendar (default)** | Weekly planning standup | Markdown calendar: LinkedIn + ad tests + blogs with evidence & links | 3-6 min |
+| **Monthly calendar** | Month-ahead planning | Week 1 detailed + weeks 2-4 themed (or full month on request) | 5-10 min |
+
+**How it works:**
+1. Agent asks 3 **content** questions (results you want, topics to highlight, what to create) — then clarifies LinkedIn length and blog aim when relevant
+2. Pulls SEO, traffic, keyword data, plus **AI web research** for viral LinkedIn/IG/TikTok posts (Perplexity/OpenAI — no social APIs)
+3. Proposes **three standard tables** — LinkedIn | Instagram/TikTok | Blog — with fixed columns (Content Idea and Focus, Body/Caption, Evidence, post references).
+4. Waits for your **approve** before writing anything
+
+**Example asks:**
+- "Plan a 7-day content calendar for LinkedIn and blogs — focus on Indonesia"
+- "Content calendar for next week: 3 LinkedIn posts, 1 blog, 2 Meta ad tests"
+- "What should we post based on what's trending in B2B sourcing?"
+
+**After approval:** "Write the Day 2 blog" or "Draft the Day 1 LinkedIn post" → routes to content_engine
 
 ---
 

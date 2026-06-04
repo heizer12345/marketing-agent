@@ -124,5 +124,5 @@ socials_skill_agent = Agent(
         get_ig_post_insights, get_ig_posts_with_insights,
         get_ig_weekly_summary,
     ],
-    model="gpt-5.5-mini",
+    model="gpt-5.5",
 )

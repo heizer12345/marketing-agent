@@ -18,6 +18,16 @@ from tools.smart_analysis import (
     analyze_blindspots, analyze_traffic_patterns,
 )
 
+# Conditionally load GA4 tools
+_ga4_tools = []
+if config.has_ga4_configured():
+    _ga4_tools = [
+        get_website_overview, get_traffic_sources, get_country_breakdown,
+        get_landing_pages, get_audience_segments, get_conversion_paths,
+        get_weekly_comparison, get_traffic_by_source_weekly,
+        analyze_blindspots, analyze_traffic_patterns,
+    ]
+
 # Conditionally load PostHog tools
 _posthog_tools = []
 try:
@@ -264,16 +274,18 @@ Your WORKFLOW must be:
 {CONFLICT_RESOLUTION_RULES}
 """
 
+_GA4_UNAVAILABLE_NOTE = ""
+if not config.has_ga4_configured():
+    _GA4_UNAVAILABLE_NOTE = """
+## GA4 NOT CONFIGURED
+Google Analytics tools are unavailable. Set GA4_PROPERTY_ID and place the service account JSON at
+credentials/service-account-key.json (or GOOGLE_APPLICATION_CREDENTIALS in .env).
+Report this clearly in your output — do not invent traffic numbers.
+"""
+
 traffic_skill_agent = Agent(
     name="Traffic Analyst",
-    instructions=INSTRUCTIONS,
-    tools=(
-        [get_website_overview, get_traffic_sources, get_country_breakdown,
-         get_landing_pages, get_audience_segments, get_conversion_paths,
-         get_weekly_comparison, get_traffic_by_source_weekly,
-         analyze_blindspots, analyze_traffic_patterns]
-        + _ads_tools
-        + _posthog_tools
-    ),
+    instructions=INSTRUCTIONS + _GA4_UNAVAILABLE_NOTE,
+    tools=_ga4_tools + _ads_tools + _posthog_tools,
     model="gpt-5.5",
 )

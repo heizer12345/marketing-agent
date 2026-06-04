@@ -15,7 +15,6 @@ from tools.search_console import (
 )
 import config
 
-from google.analytics.data_v1beta import BetaAnalyticsDataClient
 from google.analytics.data_v1beta.types import (
     RunReportRequest, DateRange, Dimension, Metric, OrderBy, FilterExpression,
     Filter,
@@ -24,7 +23,9 @@ from google.analytics.data_v1beta.types import (
 
 def _ga4_raw_report(dimensions, metrics, start, end, limit=100):
     """Direct GA4 report with explicit dates."""
-    client = BetaAnalyticsDataClient()
+    if not config.has_ga4_configured():
+        return [{"error": "GA4 not configured"}]
+    client = ga4_client()
     request = RunReportRequest(
         property=f"properties/{config.GA4_PROPERTY_ID}",
         dimensions=[Dimension(name=d) for d in dimensions],

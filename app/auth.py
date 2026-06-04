@@ -1,9 +1,12 @@
 """Auth middleware and login router for Sourcy Marketing Agent."""
 
 import os
+from dotenv import load_dotenv
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
+load_dotenv()
 
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin123")

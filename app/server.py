@@ -58,6 +58,21 @@ _RETRYABLE_EXCEPTIONS = (
     openai.InternalServerError,
 )
 
+
+def _single_task_status_label(agent_hint: str, brief: str) -> str:
+    """Human-friendly progress hints for long-running single-task requests."""
+    if agent_hint == "report":
+        return "Building report — gathering sources and generating HTML (usually 30-90 seconds)..."
+    if agent_hint == "data_analysis":
+        return "Analyzing available data sources — this can take around a minute..."
+    if agent_hint == "content_audit":
+        return "Running content audit — checking the page and assembling findings..."
+    if agent_hint == "content_write":
+        return "Writing content — drafting and packaging the result..."
+    if agent_hint == "implementation":
+        return f"Working through a multi-step task: {brief[:80]}"
+    return ""
+
 def _classify_error(exc: Exception, agent_name: str) -> dict:
     """Map an exception to a structured error payload for the frontend."""
     friendly_agent = FRIENDLY_MAP.get(agent_name, agent_name)
@@ -127,7 +142,8 @@ import config
 from pathlib import Path
 from tools.artifact_generator import SCRIPTS_DIR
 from tools.task_decomposer import decompose_tasks
-from tools.context_manager import compress_history, build_task_context
+from tools.context_manager import compress_history, build_task_context, enrich_task_brief
+from tools.intake_gate import intake_router_prefix, should_run_intake_first
 
 # Long timeout for deep agent chains (Content Engine can be 3-4 levels deep with multiple tool calls)
 _openai_client = AsyncOpenAI(timeout=1200.0, max_retries=3)  # 20 min timeout, 3 retries for deep agent chains
@@ -156,8 +172,8 @@ app.include_router(prompts_router)
 from app.v2_api import router as v2_router  # noqa: E402
 app.include_router(v2_router)
 
-_has_ga4 = bool(config.GA4_PROPERTY_ID)
-_has_sc = bool(config.SEARCH_CONSOLE_SITE_URL)
+_has_ga4 = config.has_ga4_configured()
+_has_sc = config.has_search_console_configured()
 _has_ads = bool(config.GOOGLE_ADS_REFRESH_TOKEN)
 _has_meta = bool(config.META_ACCESS_TOKEN)
 _has_semrush = bool(config.SEMRUSH_API_KEY)
@@ -578,6 +594,9 @@ FRIENDLY_MAP = {
     'fetch_reference_content': 'Fetching Reference Docs',
     # Content Engine skills
     'content_engine': 'Content Engine',
+    'content_calendar_planner': 'Content Calendar Planner',
+    'scan_marketing_trends': 'Scanning Trend Sources',
+    'save_content_file': 'Saving Content Calendar',
     'seo_content_analysis': 'SEO Content Analyst',
     'geo_content_analysis': 'GEO Content Analyst',
     'aeo_content_analysis': 'AEO Content Analyst',
@@ -708,7 +727,10 @@ async def _run_agent_stream(
                 keepalive_task.cancel()
 
         elapsed = _time.time() - request_start
-        log.info(f"[{ticket_id[:8]}] Stream loop ended in {elapsed:.1f}s. is_complete={result.is_complete}")
+        log.info(
+            f"[{ticket_id[:8]}] Stream loop ended in {elapsed:.1f}s "
+            f"({turn_count} tool turns). is_complete={result.is_complete}"
+        )
 
         # Get final output
         final_output = ""
@@ -819,15 +841,25 @@ async def websocket_ticket(websocket: WebSocket, ticket_id: str):
                     if m['role'] in ('user', 'assistant')
                 )
 
-                # 3. Decompose tasks (non-deterministic LLM call)
+                # 3. Decompose tasks (LLM call skipped for obvious single-task messages)
+                _t_decompose = _time.time()
                 tasks = await decompose_tasks(user_input, recent_context)
-                log.info(f"[{ticket_id[:8]}] Decomposed into {len(tasks)} task(s). Starting agent...")
+                log.info(
+                    f"[{ticket_id[:8]}] Decomposed into {len(tasks)} task(s) in "
+                    f"{_time.time() - _t_decompose:.1f}s (hint={tasks[0].get('agent_hint', 'auto')}). Starting agent..."
+                )
 
                 # 4. Run tasks
                 if len(tasks) == 1:
                     # Single task — normal flow, pass compressed history
                     # Use longer timeout for complex tasks (implementation, content_write, content_audit)
                     _hint = tasks[0].get("agent_hint", "auto")
+                    _brief, _hint = enrich_task_brief(
+                        tasks[0]["brief"], _hint, user_input, all_messages,
+                    )
+                    _status_label = _single_task_status_label(_hint, _brief)
+                    if _status_label:
+                        await _ws_send({"type": "tool_status", "label": _status_label})
                     # Tier-based timeouts. 30-min hard cap on the heaviest tier.
                     # Raised from (600/900/1500) based on user feedback that 10-min default
                     # was hitting false timeouts on legitimate deep analyses.
@@ -837,7 +869,11 @@ async def websocket_ticket(websocket: WebSocket, ticket_id: str):
                         _timeout = 1200  # 20 min — deep dashboards with cross-skill synthesis
                     else:
                         _timeout = 900   # 15 min — simple queries, quick lookups
-                    brief_with_id = f"[ticket_id: {ticket_id}]\n\n{tasks[0]['brief']}"
+                    brief_body = _brief
+                    if should_run_intake_first(user_input, all_messages):
+                        brief_body = intake_router_prefix(user_input) + user_input
+                        log.info(f"[{ticket_id[:8]}] Intake-first gate — no tools until user answers")
+                    brief_with_id = f"[ticket_id: {ticket_id}]\n\n{brief_body}"
                     task_messages = build_task_context(compressed, brief_with_id)
                     output = await _run_agent_stream(task_messages, _ws_send, ticket_id, request_start, timeout_seconds=_timeout)
                 else:
@@ -955,6 +991,11 @@ async def websocket_ticket(websocket: WebSocket, ticket_id: str):
             log.info(f"[{ticket_id[:8]}] WebSocket disconnected")
             break
         except Exception as e:
+            # Client closed the tab while the agent was still running — result is
+            # already persisted; don't treat a dead socket as a failed job.
+            if not ws_alive or "WebSocket is not connected" in str(e):
+                log.info(f"[{ticket_id[:8]}] WebSocket closed after run")
+                break
             log.error(f"[{ticket_id[:8]}] Outer error: {e}")
             await _ws_send({"type": "error", "data": str(e)})
             if not ws_alive:
@@ -1021,13 +1062,22 @@ async def websocket_legacy(websocket: WebSocket):
                 if len(tasks) == 1:
                     # Use same tier-based timeouts as the ticket-specific endpoint
                     _hint_leg = tasks[0].get("agent_hint", "auto")
+                    _brief_leg, _hint_leg = enrich_task_brief(
+                        tasks[0]["brief"], _hint_leg, user_input, all_messages,
+                    )
+                    _status_label_leg = _single_task_status_label(_hint_leg, _brief_leg)
+                    if _status_label_leg:
+                        await _ws_send({"type": "tool_status", "label": _status_label_leg})
                     if _hint_leg in ("implementation", "content_write", "content_audit", "report"):
                         _timeout_leg = 1800
                     elif _hint_leg == "data_analysis":
                         _timeout_leg = 1200
                     else:
                         _timeout_leg = 900
-                    brief_with_id = f"[ticket_id: {ticket_id}]\n\n{tasks[0]['brief']}"
+                    brief_body_leg = _brief_leg
+                    if should_run_intake_first(user_input, all_messages):
+                        brief_body_leg = intake_router_prefix(user_input) + user_input
+                    brief_with_id = f"[ticket_id: {ticket_id}]\n\n{brief_body_leg}"
                     task_messages = build_task_context(compressed, brief_with_id)
                     output = await _run_agent_stream(task_messages, _ws_send, ticket_id, request_start, timeout_seconds=_timeout_leg)
                 else:

@@ -42,15 +42,23 @@ async def memory_state(persona: str = "sourcy", design: str = "sourcy"):
 
     setup_complete = bool(persona_data) and bool(design_data)
 
+    ga4_ping = config.ping_ga4()
+    gsc_ping = config.ping_search_console()
+
     api_status = {
         "openai": bool(config.OPENAI_API_KEY),
-        "ga4": bool(getattr(config, "GA4_PROPERTY_ID", "")),
-        "search_console": bool(getattr(config, "SEARCH_CONSOLE_SITE_URL", "")),
+        "ga4": ga4_ping["ok"],
+        "search_console": gsc_ping["ok"],
         "google_ads": bool(getattr(config, "GOOGLE_ADS_REFRESH_TOKEN", "")),
         "meta_ads": bool(getattr(config, "META_ACCESS_TOKEN", "")),
         "semrush": bool(getattr(config, "SEMRUSH_API_KEY", "")),
         "instagram": bool(getattr(config, "INSTAGRAM_BUSINESS_ACCOUNT_ID", "")),
         "posthog": bool(getattr(config, "POSTHOG_API_KEY", "")),
+    }
+
+    api_status_detail = {
+        "ga4": ga4_ping,
+        "search_console": gsc_ping,
     }
 
     return JSONResponse({
@@ -60,6 +68,7 @@ async def memory_state(persona: str = "sourcy", design: str = "sourcy"):
         "principles": principles,
         "winners": winners,
         "api_status": api_status,
+        "api_status_detail": api_status_detail,
     })
 
 
@@ -146,6 +155,33 @@ def _write_home_cache(data: dict) -> None:
     _HOME_CACHE.write_text(json.dumps(data, indent=2))
 
 
+def _normalize_home_snapshot(parsed: dict) -> dict:
+    """Apply consistent drill-down structure to attention items."""
+    from app.briefing_detail import build_briefing_detail
+
+    kpis = parsed.get("kpis") if isinstance(parsed.get("kpis"), list) else []
+
+    alerts = [
+        build_briefing_detail(
+            a,
+            default_next="Open Chat and ask for a step-by-step fix plan for this alert.",
+            kpis=kpis,
+        )
+        for a in (parsed.get("alerts") or [])
+        if isinstance(a, dict) and (a.get("text") or "").strip()
+    ]
+    recommendations = [
+        build_briefing_detail(
+            r,
+            default_next="Assign an owner and add this to this week's marketing sprint.",
+            kpis=kpis,
+        )
+        for r in (parsed.get("recommendations") or [])
+        if isinstance(r, dict) and (r.get("text") or "").strip()
+    ]
+    return {**parsed, "alerts": alerts, "recommendations": recommendations}
+
+
 async def _run_home_analysis_background() -> None:
     """Run a deep marketing analysis and cache structured insights.
 
@@ -174,15 +210,36 @@ async def _run_home_analysis_background() -> None:
             '  "kpis": [{"label": "Sessions (7d)", "value": "12,180", "delta_pct": -8.2, "source": "GA4"}, ...],\n'
             '  "insights": [{"text": "Sessions dropped 12% in DE week-over-week", "severity": "important", "source": "GA4"}, ...],\n'
             '  "top_movers": [{"text": "\\"private label sourcing\\" rank 8 → 4", "kind": "keyword_up", "source": "Search Console"}, ...],\n'
-            '  "alerts": [{"text": "Meta CPL up 34% to $108", "severity": "urgent", "source": "Meta Ads"}, ...],\n'
-            '  "recommendations": [{"text": "Pause Philippines blog campaign — 0 conversions, $22 spend", "priority": "high", "source": "Google Ads"}, ...]\n'
+            '  "alerts": [{\n'
+            '    "text": "Short headline (max 120 chars)",\n'
+            '    "severity": "urgent",\n'
+            '    "source": "GA4",\n'
+            '    "detail": {\n'
+            '      "cause": "Why this is happening — causal mechanism, not just the symptom",\n'
+            '      "evidence": "Specific metrics with numbers, date range, and comparison (WoW/benchmark)",\n'
+            '      "pages": ["https://www.sourcy.ai/onboard", "https://www.sourcy.ai/blogs/example-slug"],\n'
+            '      "suggestion": "What we recommend doing about it",\n'
+            '      "next_step": "One concrete action marketing can take today"\n'
+            '    }\n'
+            '  }, ...],\n'
+            '  "recommendations": [{\n'
+            '    "text": "Short action headline",\n'
+            '    "priority": "high",\n'
+            '    "source": "Google Ads",\n'
+            '    "detail": { "cause": "...", "evidence": "...", "pages": ["..."], "suggestion": "...", "next_step": "..." }\n'
+            '  }, ...]\n'
             "}\n\n"
             "Rules:\n"
             "- Severity: 'urgent' / 'important' / 'info'.   Priority: 'high' / 'medium' / 'low'.\n"
-            "- DEPTH targets: 6-8 KPIs, 10-15 insights, 5-8 top_movers, 0-5 alerts, 5-10 recommendations.\n"
+            "- DEPTH targets: 6-8 KPIs, 10-15 insights, 5-8 top_movers, 3-6 alerts, 5-10 recommendations.\n"
             "- Insights must span ALL channels — at least 1-2 from each of: GA4, Search Console, Google Ads, Meta Ads, Sourcy DB.\n"
             "- Every entry needs a `source` field referencing the data source.\n"
             "- Quote specific numbers, never vague claims.\n"
+            "- **MANDATORY for every `alerts[]` and `recommendations[]` item**: include a complete `detail` object with all 5 keys:\n"
+            "  cause, evidence, pages (array of full https://www.sourcy.ai/... URLs — at least 1 when GA4/GSC/page-level), suggestion, next_step.\n"
+            "- `pages` must use full sourcy.ai URLs (e.g. https://www.sourcy.ai/onboard, https://www.sourcy.ai/blogs/slug) — never bare paths like /onboard.\n"
+            "- In cause, suggestion, and next_step prose, reference pages as www.sourcy.ai/path (not /path).\n"
+            "- `text` is the card headline only; put depth in `detail`.\n"
             "- If a data source is unavailable, omit entries for it — DO NOT make numbers up.\n"
             "- Return ONLY the JSON object. No HTML artifact, no extra prose.\n"
             "- The <<<JSON>>>...<<<END_JSON>>> wrappers are mandatory."
@@ -202,6 +259,8 @@ async def _run_home_analysis_background() -> None:
         if not parsed:
             # As a fallback, dump the whole text as an "insights" bullet
             parsed = {"kpis": [], "insights": [{"text": text[:280], "severity": "info", "source": "raw output"}], "top_movers": [], "alerts": []}
+
+        parsed = _normalize_home_snapshot(parsed)
 
         snapshot = {
             "generated_at": int(time.time()),
@@ -226,15 +285,23 @@ async def _run_home_analysis_background() -> None:
 
 
 def _latest_dashboard_html_url() -> dict | None:
-    """Find the most recent comprehensive analysis dashboard HTML in /public/reports.
-    The synthesis_agent saves these as `report_<ticket>_<ts>.html` — rich Atria-style
-    pages with KPI cards, charts, tables, message-alignment cards, etc."""
+    """Find a dedicated Home dashboard HTML, if one exists.
+
+    Home snapshot generation currently requests JSON only and does NOT create an
+    HTML artifact. Chat/report runs do create `report_<ticket>_<ts>.html`, but
+    those are ticket-specific artifacts and should not be embedded into the Home
+    page. Doing so makes Home show an unrelated SEO/report artifact, which is
+    misleading.
+
+    Until Home has its own dedicated artifact writer, only surface files that are
+    explicitly named for Home dashboards.
+    """
     reports = config.BASE_DIR / "public" / "reports"
     if not reports.exists():
         return None
-    # Prefer `report_*` (full dashboards from synthesis_agent); fall back to any html.
+    # Only dedicated Home artifacts belong on the Home tab.
     candidates = sorted(
-        list(reports.glob("report_*.html")),
+        list(reports.glob("home_dashboard_*.html")),
         key=lambda p: p.stat().st_mtime,
         reverse=True,
     )
@@ -255,6 +322,18 @@ async def home_snapshot(force: bool = False):
     as the primary view (rich charts, tables, KPIs) and falls back to the
     structured bullets for at-a-glance summary."""
     cache = _read_home_cache()
+    if cache and cache.get("status") == "ok":
+        normalized = _normalize_home_snapshot(cache)
+        cache = {
+            **cache,
+            "alerts": normalized.get("alerts", []),
+            "recommendations": normalized.get("recommendations", []),
+        }
+        # Persist enriched detail so restarts and other workers see the same shape.
+        try:
+            _write_home_cache(cache)
+        except Exception:
+            pass
     now = int(time.time())
     is_stale = cache is None or (now - cache.get("generated_at", 0) > _SNAPSHOT_TTL_SECONDS)
 
@@ -281,6 +360,17 @@ async def _refresh_with_lock() -> None:
         return
     async with _home_refresh_lock:
         await _run_home_analysis_background()
+
+
+@router.get("/home/kpi-trend")
+async def home_kpi_trend(label: str, source: str = ""):
+    """Daily trend series + drivers for a Home KPI card (loaded on click)."""
+    from app.kpi_trends import fetch_kpi_trend, resolve_kpi_key
+
+    cache = _read_home_cache() or {}
+    insights = cache.get("insights") if isinstance(cache.get("insights"), list) else []
+    kpi_key = resolve_kpi_key(label, source)
+    return fetch_kpi_trend(kpi_key, label, source, insights)
 
 
 @router.post("/home/refresh")
@@ -542,6 +632,36 @@ async def cleanup_empty_tickets():
         for row in rows:
             tid = row["id"]
             # Cascade delete: artifacts (none), messages (none), then ticket itself.
+            await conn.execute("DELETE FROM tickets WHERE id = ?", (tid,))
+            deleted.append(tid)
+        await conn.commit()
+    return {"ok": True, "deleted_count": len(deleted), "deleted_ticket_ids": deleted}
+
+
+@router.post("/cleanup/broken-tickets")
+async def cleanup_broken_tickets():
+    """Delete failed tickets and in-progress tickets with no assistant reply (stuck/empty runs)."""
+    import app.database as db
+    import aiosqlite
+
+    deleted: list[str] = []
+    async with aiosqlite.connect(db.DB_PATH) as conn:
+        conn.row_factory = aiosqlite.Row
+        cur = await conn.execute(
+            """
+            SELECT t.id
+              FROM tickets t
+             WHERE t.status IN ('failed', 'deleted')
+                OR NOT EXISTS (
+                    SELECT 1 FROM messages m WHERE m.ticket_id = t.id
+                )
+            """
+        )
+        rows = await cur.fetchall()
+        for row in rows:
+            tid = row["id"]
+            await conn.execute("DELETE FROM messages WHERE ticket_id = ?", (tid,))
+            await conn.execute("DELETE FROM artifacts WHERE ticket_id = ?", (tid,))
             await conn.execute("DELETE FROM tickets WHERE id = ?", (tid,))
             deleted.append(tid)
         await conn.commit()

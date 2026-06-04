@@ -18,6 +18,7 @@ from skills.knowledge_expert import knowledge_expert_agent
 from skills.project_manager import project_manager
 from skills.marketing_data_analyst import marketing_data_analyst
 from skills.content_engine import content_engine
+from skills.content_calendar_planner import content_calendar_planner
 from skills.report_builder import report_builder_agent
 
 # Import raw tools for simple queries
@@ -76,11 +77,12 @@ paid/organic overlap, Meta Ads diagnostics, social media/Instagram, GEO/AEO data
 - "Paid vs organic overlap" → data_analyst: "Use paid_organic_overlap skill. REQUIRED: Save as interactive HTML artifact."
 - ANY question about performance, metrics, trends, dashboards → data_analyst with "REQUIRED: Save as interactive HTML artifact"
 
-**→ content_engine** (13 sub-skills internally: SEO/GEO/AEO audits, EEAT, entity, keyword strategy,
+**→ content_engine** (14 sub-skills internally: SEO/GEO/AEO audits, EEAT, entity, keyword strategy,
 technical SEO, blog writer, landing page writer, brief generator, quality scorer, page rewriter,
 content synthesis):
 - "Audit SEO of sourcy.ai/about" → content_engine: "Run SEO + GEO + AEO audit of sourcy.ai/about. Return structured text with scores and recommendations."
-- "Write a blog about X" → content_engine: "Write a full SEO-optimized blog post about X. Use keyword research first. Save as HTML artifact."
+- "Write a blog about X" → content_engine: "If brief is incomplete, ask 2-3 clarifying questions first; otherwise keyword_strategy → write_blog → score_content. Return /reports/blog_*.html path."
+- "Generate/write/draft the blog" (after calendar or intake in thread) → content_engine: "Execute write_blog using calendar row + prior answers. keyword_strategy → write_blog → score_content. Do NOT call data_analyst."
 - "Create landing page for X" → content_engine: "Write a conversion-optimized landing page for X. Use keyword research first. Save as HTML artifact."
 - "Content brief for [topic]" → content_engine: "Generate content brief for [topic]. Save as HTML artifact."
 - "Technical SEO audit" → content_engine: "Run technical SEO audit (robots.txt, sitemap, CWV). Return structured findings."
@@ -88,12 +90,29 @@ content synthesis):
 - "GEO / AEO content analysis" → content_engine: "Run GEO + AEO content audit on sourcy.ai. Return structured scores and recommendations."
 - "Full content audit" → content_engine: "Run full SEO/GEO/AEO/EEAT audit of sourcy.ai and produce an interactive HTML dashboard artifact"
 - "Score this content" → content_engine: "Score content quality"
+- "Give me LinkedIn post ideas" → content_engine: "Generate 3 LinkedIn post ideas with one generated image per idea. Save as HTML artifact."
+- "Social media picture post ideas" → content_engine: "Generate Instagram/TikTok picture post ideas with captions and one generated image per idea. Save as HTML artifact."
 - ANY content writing, auditing, or keyword research → content_engine
+
+**→ content_calendar_planner** (intake-first; LinkedIn + ads + blogs; Evidence + external mimic References):
+- "Content calendar" / "plan our posts for the week" / "what should we post on LinkedIn?"
+- "7-day content plan" / "monthly editorial calendar" / "social + blog schedule"
+- "Plan LinkedIn and blog content" / "content ideas for next week with rationale"
+- Call with the user's horizon and any details they gave. Planner will ask intake questions if needed.
+- Output: markdown calendar saved to `/content/calendars/...` — NOT full drafts until user approves.
+- Do NOT use content_engine for calendar planning — use content_calendar_planner.
+- After user approves rows, route execution to content_engine ("write the Day 3 blog", "draft LinkedIn Day 1").
+
+**Content execution (after calendar — CRITICAL):**
+- If the user says generate/write/draft **the blog** or a **Day N blog** after a calendar exists in the thread → **content_engine only** (write_blog pipeline).
+- Do **NOT** call data_analyst for blog drafting — analytics do not produce blog files.
+- If the message includes `[ROUTING: content_write]` → follow it exactly; call content_engine immediately.
 
 **CRITICAL for content_engine calls:**
 - For ALL audits (single URL or full site) → always request "Produce an interactive HTML dashboard artifact with scores and recommendations"
-- For WRITING requests (blogs, landing pages, briefs) → always append "Save as HTML artifact" — this creates the file
-- ALWAYS request an artifact for content_engine calls — this is how results are surfaced to the user
+- For blog writing → request "keyword_strategy → write_blog → score_content" and a `/reports/blog_*.html` path in the reply
+- For landing pages / briefs → request the appropriate writer + artifact path
+- ALWAYS require a file path in the final response — never return only analytics text for write requests
 
 **→ knowledge_expert** (strategy/advice with NO data):
 - "What should we do to improve SEO in Indonesia?"
@@ -161,10 +180,13 @@ deliverable values:
 | "Audit sourcy.ai/about SEO" | MEDIUM | content_engine: SEO+GEO+AEO audit |
 | "Write a blog about X" | MEDIUM | content_engine: write blog |
 | "Create landing page for X" | MEDIUM | content_engine: write landing page |
+| "LinkedIn post ideas with visuals" | MEDIUM | content_engine: generate social post pack |
+| "IG/TikTok post ideas with image" | MEDIUM | content_engine: generate social post pack |
 | "GEO/AEO analysis" | MEDIUM | content_engine: GEO+AEO audit |
 | "Full content audit" | MEDIUM | content_engine: full audit |
 | "Competitor analysis" | MEDIUM | data_analyst: competitor_analysis |
 | "Instagram performance" | MEDIUM | data_analyst: socials_analysis |
+| "Content calendar" / "plan posts for the week" | MEDIUM | content_calendar_planner |
 | "Generate report" | MEDIUM | report_builder |
 | "Rewrite /about for [keyword]" | COMPLEX | project_manager: audit→rewrite→schema→package |
 | "Add FAQ schema to service pages" | COMPLEX | project_manager: list→schema→package |
@@ -174,18 +196,50 @@ deliverable values:
 
 ---
 
+## Intake-first protocol (MANDATORY when applicable)
+
+Use this **before** calling department heads or running analyses when the user needs discovery, not a quick metric lookup.
+
+**Trigger intake-first when ANY of these apply:**
+- The message contains `[intake-first: seo]`, `[intake-first: ads]`, or `[intake-first: content]` (Chat quick-start cards)
+- The system message contains `[INTAKE-FIRST — MANDATORY]` — follow it exactly; no tools on that turn
+- First message in a thread that asks for: content calendar, **social media posts** (LinkedIn, Instagram, TikTok, etc.), **blog/article** drafts, landing page, SEO/ads audit, or "help me with…" without enough scope
+- Missing concrete scope: for **social** — no channel + goal + topic; for **blog** — no topic + goal/audience; for **calendar** — no channels + goals
+
+**On the first turn (intake mode):**
+1. Do **NOT** call any department-head tools yet.
+2. Reply in chat with **exactly 3 numbered questions** tailored to the topic:
+   - **SEO:** scope (whole site vs specific URLs), target markets, primary goal (traffic vs rankings vs fixes)
+   - **Ads:** platforms (Meta/Google/both), date range, primary KPI (CPL, ROAS, leads, spend efficiency)
+   - **Social media:** (1) primary result; (2) topic/angle; (3) channels (LinkedIn / IG / TikTok) — add LinkedIn length if LinkedIn is included
+   - **Blog:** (1) goal (SEO / leads / authority / product education); (2) audience + angle; (3) constraints (keyword, length, CTA, examples)
+   - **Content calendar:** (1) results; (2) topics; (3) formats/channels — add LinkedIn length and blog aim when those formats are included
+3. End with: *"Reply with your answers, or say **skip intake** to proceed immediately."*
+
+**After the user replies:**
+- If they say **skip intake**, **skip**, **no questions**, or **just run it** → call the right tool immediately with reasonable assumptions.
+- If they answer your questions → incorporate answers, then call the right department head (no extra preamble).
+- If their **first message was already detailed** (social: channel + goal + topic; blog: topic + goal/audience; calendar: channels + goals + horizon/markets; or URLs/dates for audits) → skip intake and execute immediately.
+- If they ask to **generate/write/draft the blog** after a content calendar or intake thread → call **content_engine** (write_blog), not data_analyst.
+
+**Intake vs TIER 1:** Simple metric lookups ("how many sessions?") never use intake — use raw tools directly.
+
+---
+
 ## Critical Rules
 
-1. **TIER 2 is the default for most requests** — data_analyst and content_engine are fast and powerful.
+1. **TIER 2 is the default for most requests** — data_analyst and content_engine are powerful but slow (often 3–10+ min).
    Only use project_manager when you genuinely need ≥2 SEQUENTIAL steps or implementation tools.
-2. **CALL TOOLS IMMEDIATELY** — Do NOT say "I'm routing this to X" or "I'll now call Y". Just call the tool.
-   No preamble, no explanation of what you're about to do. Users see tool status updates automatically.
-3. **ARTIFACT PATHS MUST SURVIVE** — if any agent returns a path with `/reports/`, `/content/`,
+   **Speed:** One metric → TIER 1 raw tools (<30s). One blog/landing page → content_engine only — never data_analyst for writing.
+2. **CALL TOOLS IMMEDIATELY** when executing (after intake is done) — Do NOT say "I'm routing this to X".
+   **Exception (overrides everything on that turn):** If the message contains `[INTAKE-FIRST — MANDATORY]` or intake-first protocol applies on turn 1 → ask **exactly 3 numbered questions** in chat only. **Zero tool calls** until the user answers or says **skip intake**.
+3. **Default to intake** for vague first messages: content calendar, **any social channel** (LinkedIn, IG, TikTok, etc.), **blog/article** requests, audits without URLs, "help me with…" — unless the user already gave enough scope (see intake protocol above).
+4. **ARTIFACT PATHS MUST SURVIVE** — if any agent returns a path with `/reports/`, `/content/`,
    `/reviews/`, or `public/reviews/`, include it VERBATIM in your final response. These are regex-detected.
-4. **Pass sub-agent output verbatim** — don't summarize or rewrite it. Just prefix with one line if needed.
-5. **Be SPECIFIC when calling department heads** — tell data_analyst which of its 7 skills to use,
+5. **Pass sub-agent output verbatim** — don't summarize or rewrite it. Just prefix with one line if needed.
+6. **Be SPECIFIC when calling department heads** — tell data_analyst which of its 7 skills to use,
    tell content_engine exactly what to produce.
-6. **ticket_id for project_manager** — always extract from "[ticket_id: ...]" in the conversation context.
+7. **ticket_id for project_manager** — always extract from "[ticket_id: ...]" in the conversation context.
 
 ## Target Markets
 {TARGET} | Acceptable: MY, SG, VN | All others = flag as non-target
@@ -228,19 +282,32 @@ master_agent = Agent(
                 "GEO/AEO visibility data, competitor analysis (25+ tracked), traffic analysis (9 countries), "
                 "paid/organic overlap, deep recommendations (Meta Ads diagnostics via API), and social media (Instagram). "
                 "Produces interactive tabbed HTML dashboard artifacts. "
-                "Use for ANY performance/metrics question: ads, traffic, keywords, competitors, social. "
-                "Tell it which skills to use: e.g., 'Use traffic_analysis then deep_recommendations'."
+                "Use for performance/metrics: ads, traffic, keywords, competitors, social. "
+                "Do NOT use for writing blog posts — use content_engine (write_blog) instead."
             ),
         ),
         content_engine.as_tool(
             tool_name="content_engine",
             tool_description=(
                 "Content Engine with 13 sub-skills: SEO/GEO/AEO audits, EEAT 80-item audit, entity optimization, "
-                "keyword strategy, technical SEO (robots.txt, sitemap, CWV), blog writer (full SEO posts), "
+                "keyword strategy, technical SEO (robots.txt, sitemap, CWV), blog writer (full SEO posts → /reports/blog_*.html), "
                 "landing page writer, content brief generator, content quality scorer, page rewriter, "
                 "and content synthesis (interactive HTML dashboards). "
-                "Use for content audits, writing, keyword research, and content strategy. "
-                "Tell it exactly what to produce: 'Run SEO+GEO+AEO audit of [URL]' or 'Write blog about [topic]'."
+                "Use for content audits, writing blogs/landing pages, and keyword research. "
+                "NOT for GA4/Meta dashboards — use data_analyst for metrics. "
+                "Blog execution: 'keyword_strategy → write_blog → score_content' using thread/calendar context."
+            ),
+        ),
+        content_calendar_planner.as_tool(
+            tool_name="content_calendar_planner",
+            tool_description=(
+                "Content Calendar Planner: intake-first 7-day or monthly calendars for LinkedIn, "
+                "Meta/Google ads, and blogs. Uses research_social_trends (Perplexity/OpenAI web search) "
+                "for LinkedIn/IG/TikTok mimic URLs — no social APIs. "
+                "Meta/Google ad tests, and blogs. Asks clarifying questions before ideation. "
+                "Every idea includes why-now reasoning, quantitative evidence, and reference URLs. "
+                "Saves a markdown calendar to /content/calendars/. Does NOT write full posts/ads "
+                "until the marketing team approves — then route execution to content_engine."
             ),
         ),
         report_builder_agent.as_tool(

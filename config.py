@@ -5,35 +5,58 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+# --- Public marketing site (briefing links, page references) ---
+PUBLIC_SITE_URL = os.getenv("PUBLIC_SITE_URL", "https://www.sourcy.ai").rstrip("/")
+
 # --- Base paths ---
 BASE_DIR = Path(__file__).parent
 CONFIG_DIR = BASE_DIR / "config"
 KNOWLEDGE_DIR = BASE_DIR / "knowledge"
 SPECS_DIR = BASE_DIR / "specs"
 SKILLS_DIR = BASE_DIR / "skills"
+CREDENTIALS_DIR = BASE_DIR / "credentials"
 OUTPUT_DIR = BASE_DIR / "public" / "reports"
+CREDENTIALS_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 # --- Content Engine output ---
 CONTENT_OUTPUT_DIR = BASE_DIR / "public" / "content"
-for _subdir in ("blogs", "audits", "briefs", "landing-pages"):
+for _subdir in ("blogs", "audits", "briefs", "landing-pages", "calendars"):
     (CONTENT_OUTPUT_DIR / _subdir).mkdir(parents=True, exist_ok=True)
 
 # --- OpenAI ---
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 
 # --- Google Cloud / Auth ---
-# On Railway/cloud: store full JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON env var
-if _cred_json := os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON"):
-    _cred_path = Path("/tmp/google_creds.json")
-    _cred_path.write_text(_cred_json)
-    os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(_cred_path)
+_DEFAULT_GOOGLE_CREDENTIALS_PATH = CREDENTIALS_DIR / "service-account-key.json"
+_INLINE_GOOGLE_CREDENTIALS_PATH = CREDENTIALS_DIR / "service-account-key.inline.json"
+_INLINE_GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "").strip()
+_GOOGLE_CREDENTIALS_ENV_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
 
-GOOGLE_APPLICATION_CREDENTIALS = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    str(BASE_DIR / "credentials" / "service-account-key.json")
-)
+# On Railway/cloud: store full JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON env var.
+# For local dev, we persist the inline JSON into the repo-local credentials dir so
+# the same path works on Windows and future restarts do not depend on /tmp.
+def _resolve_credentials_path(path: str | Path) -> Path:
+    """Always resolve to an absolute path under BASE_DIR when relative."""
+    p = Path(path)
+    if not p.is_absolute():
+        p = BASE_DIR / p
+    return p.resolve()
+
+
+if _INLINE_GOOGLE_CREDENTIALS_JSON:
+    _INLINE_GOOGLE_CREDENTIALS_PATH.write_text(_INLINE_GOOGLE_CREDENTIALS_JSON, encoding="utf-8")
+    GOOGLE_APPLICATION_CREDENTIALS = str(_resolve_credentials_path(_INLINE_GOOGLE_CREDENTIALS_PATH))
+elif _GOOGLE_CREDENTIALS_ENV_PATH:
+    GOOGLE_APPLICATION_CREDENTIALS = str(_resolve_credentials_path(_GOOGLE_CREDENTIALS_ENV_PATH))
+else:
+    GOOGLE_APPLICATION_CREDENTIALS = str(_resolve_credentials_path(_DEFAULT_GOOGLE_CREDENTIALS_PATH))
+
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = GOOGLE_APPLICATION_CREDENTIALS
+
+
+def google_credentials_path() -> Path:
+    return Path(GOOGLE_APPLICATION_CREDENTIALS)
 
 # --- Google Ads (OAuth2) ---
 GOOGLE_ADS_DEVELOPER_TOKEN = os.getenv("GOOGLE_ADS_DEVELOPER_TOKEN", "")
@@ -69,6 +92,62 @@ INSTAGRAM_BUSINESS_ACCOUNT_ID = os.getenv("INSTAGRAM_BUSINESS_ACCOUNT_ID", "")
 POSTHOG_API_KEY = os.getenv("POSTHOG_API_KEY", "")
 POSTHOG_PROJECT_ID = os.getenv("POSTHOG_PROJECT_ID", "")
 POSTHOG_HOST = os.getenv("POSTHOG_HOST", "https://us.posthog.com")
+
+
+def has_google_credentials() -> bool:
+    """Return True when GA4/Search Console credentials file exists."""
+    return google_credentials_path().is_file()
+
+
+def ping_ga4() -> dict:
+    """Lightweight live check — returns {ok, detail, sessions?}."""
+    if not has_ga4_configured():
+        return {"ok": False, "detail": "GA4_PROPERTY_ID or credentials missing"}
+    try:
+        from datetime import datetime, timedelta
+        from google.analytics.data_v1beta import BetaAnalyticsDataClient
+        from google.analytics.data_v1beta.types import RunReportRequest, DateRange, Metric
+        from tools.google_credentials import get_service_account_credentials, GA4_SCOPES
+
+        end = datetime.now().strftime("%Y-%m-%d")
+        start = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
+        client = BetaAnalyticsDataClient(
+            credentials=get_service_account_credentials(GA4_SCOPES)
+        )
+        resp = client.run_report(
+            RunReportRequest(
+                property=f"properties/{GA4_PROPERTY_ID}",
+                metrics=[Metric(name="sessions")],
+                date_ranges=[DateRange(start_date=start, end_date=end)],
+            )
+        )
+        sessions = resp.rows[0].metric_values[0].value if resp.rows else "0"
+        return {"ok": True, "detail": f"property {GA4_PROPERTY_ID}", "sessions_7d": sessions}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_search_console() -> dict:
+    """Lightweight live check — returns {ok, detail}."""
+    if not has_search_console_configured():
+        return {"ok": False, "detail": "SEARCH_CONSOLE_SITE_URL or credentials missing"}
+    try:
+        from tools.search_console import _query_search_analytics
+
+        rows = _query_search_analytics(["query"], "last_7_days", row_limit=1)
+        if rows and "error" in rows[0]:
+            return {"ok": False, "detail": rows[0]["error"][:200]}
+        return {"ok": True, "detail": SEARCH_CONSOLE_SITE_URL}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def has_ga4_configured() -> bool:
+    return bool(GA4_PROPERTY_ID) and has_google_credentials()
+
+
+def has_search_console_configured() -> bool:
+    return bool(SEARCH_CONSOLE_SITE_URL) and has_google_credentials()
 
 # --- Target Markets ---
 def load_target_markets():
@@ -129,5 +208,7 @@ def load_knowledge(filename: str) -> str:
     """Load a knowledge base MD file content."""
     path = KNOWLEDGE_DIR / filename
     if path.exists():
-        return path.read_text()
+        # Explicit utf-8 — on Windows the default codec is cp1252 which chokes
+        # on em dashes / curly quotes that appear throughout the knowledge MD files.
+        return path.read_text(encoding="utf-8")
     return ""

@@ -123,8 +123,15 @@ function TourModal({ step, setStep, paused, setPaused, onClose, onNavigate }: {
   }, [step, paused, isLast, setStep]);
 
   // Navigate when entering a step that has a target route.
+  // Defer to the next tick so the navigation doesn't race with React's render
+  // commit — calling router.push synchronously inside a layout-effect chain
+  // can trigger "Cannot update a component while rendering" and crash the
+  // root ErrorBoundary, especially when downstream effects (data fetches)
+  // throw on a missing backend.
   useEffect(() => {
-    if (current.href) onNavigate(current.href);
+    if (!current.href) return;
+    const id = setTimeout(() => onNavigate(current.href!), 0);
+    return () => clearTimeout(id);
   }, [step]); // eslint-disable-line
 
   const progress = isLast ? 1 : Math.min(1, tick / STEP_AUTOPLAY_MS);

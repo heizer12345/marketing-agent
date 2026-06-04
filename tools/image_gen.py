@@ -148,7 +148,8 @@ def generate_image(
         aspect_ratio: `square`, `portrait` (vertical), or `landscape` (wide).
         extra_prompt: Optional extra detail to append to the prompt.
 
-    Returns: {url, prompt_used, refs_used, elapsed_seconds}
+    Returns: {url, public_url, copy_url, prompt_used, refs_used, elapsed_seconds}
+    Use public_url (https://www.sourcy.ai/content/images/...) in artifacts and chat — not bare /content/ paths.
     """
     started = time.time()
 
@@ -182,8 +183,11 @@ def generate_image(
         }
 
     url = _save_image_bytes(img_bytes, hint=job_type)
+    public_url = f"{config.PUBLIC_SITE_URL}{url}"
     return {
         "url": url,
+        "public_url": public_url,
+        "copy_url": public_url.replace("https://", "www."),
         "prompt_used": prompt,
         "refs_used": [str(r.name) for r in refs],
         "elapsed_seconds": round(time.time() - started, 2),

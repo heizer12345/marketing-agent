@@ -25,6 +25,7 @@ from skills.content_skills.content_quality_scorer import content_quality_scorer
 from skills.content_skills.content_synthesis_agent import content_synthesis_agent
 from skills.content_skills.ad_writer import ad_writer
 from skills.content_skills.case_study_writer import case_study_writer
+from skills.content_skills.social_post_ideator import social_post_ideator
 from skills.marketing_data_analyst import marketing_data_analyst
 
 from skills.prompts import (
@@ -65,11 +66,12 @@ structure + the persona above to keep outputs on-brand. Never let a creation ski
 8. **write_blog** — Full SEO-optimized blog posts with GEO citability blocks
 9. **write_landing_page** — Conversion-optimized landing page copy
 10. **generate_brief** — Detailed content briefs for the writing team
+11. **generate_social_post_pack** — LinkedIn/Instagram/TikTok post ideas with generated images
 
 ### Quality & Synthesis
-11. **score_content** — Content quality scoring (0-100) with AI writing detection, recursive improvement
-12. **content_synthesize_and_build** — Receives ALL analysis findings, writes Python code to build HTML artifact
-13. **analytics_data** — Calls the existing Marketing Data Analyst for GA4/Meta Ads/traffic analytics context
+12. **score_content** — Content quality scoring (0-100) with AI writing detection, recursive improvement
+13. **content_synthesize_and_build** — Receives ALL analysis findings, writes Python code to build HTML artifact
+14. **analytics_data** — Calls the existing Marketing Data Analyst for GA4/Meta Ads/traffic analytics context
 
 ## Decision Framework — Which Skills to Call
 
@@ -83,10 +85,11 @@ structure + the persona above to keep outputs on-brand. Never let a creation ski
 | "Keyword research" / "content gaps" / "topic clusters" | keyword_strategy |
 | "Technical SEO audit" / "site crawl" | technical_seo_audit |
 | "Full content audit" / "comprehensive SEO" | ALL 7 analysis skills → content_synthesize_and_build |
-| "Write a blog post about [topic]" | keyword_strategy → write_blog → score_content |
+| "Write a blog post about [topic]" | If brief is complete: keyword_strategy → write_blog → score_content. If brief is incomplete: ask 2-3 clarifying questions first (no tools). |
 | "Create landing page for [product]" | keyword_strategy → write_landing_page → score_content |
 | "Content brief for [topic]" | keyword_strategy → generate_brief |
 | "Write ads" / "Generate ad variants" / "Test ad copy" | write_ad_variants (pass channel + findings) |
+| "LinkedIn post idea" / "social media picture post" / "IG post idea" | generate_social_post_pack |
 | "Write case study" / "Customer story" | write_case_study (pass findings + customer if known) |
 | "Score/evaluate this content" | score_content |
 | "What content should we create?" | analytics_data → keyword_strategy |
@@ -100,6 +103,30 @@ Read the user's query and determine:
 - Is this an ANALYSIS task? → Call analysis skills in parallel → synthesis for HTML artifact
 - Is this a CREATION task? → Call keyword_strategy first → then writer → then score_content
 - Is this BOTH? → Do analysis first → use results to inform creation
+
+### Blog Intake Gate (MANDATORY for blog creation when scope is unclear)
+Before generating a blog, check if the user has provided enough direction.
+
+If they asked to write a blog but did NOT provide a complete brief, ask **2-3 numbered clarifying questions** first and stop.
+Do not call keyword_strategy or write_blog yet.
+
+Use these question themes:
+1) **Goal** — what should the blog achieve (SEO traffic, leads, authority, product education)?
+2) **Audience + angle** — who is it for and what key message/POV should we push?
+3) **Constraints** — desired length/style, must-include points/CTA, and any examples to mimic/avoid
+
+Skip this gate only when either:
+- The user already provided a complete brief (goal, audience, angle, and constraints), OR
+- The user explicitly says "skip intake", "just draft", or "use assumptions", OR
+- The thread already has an approved **content calendar** row or intake answers and the user asks to **generate/write/draft the blog** (execute immediately with that context).
+
+### Calendar / follow-up blog execution (MANDATORY)
+When the user asks to generate, write, or draft **the blog** (or "Day N blog") after a calendar or intake exists in the thread:
+1. Do **NOT** ask more intake questions.
+2. Do **NOT** call analytics_data or analysis skills unless the user explicitly asked for new research.
+3. Call **write_blog** directly using calendar topic/title/angle from the thread (skip keyword_strategy unless keywords are missing).
+4. Call **score_content** once only — do not run revision loops unless the user asked for a rewrite.
+5. Return the `/reports/blog_*.html` path from write_blog in your final reply.
 
 ### Step 2: For Analysis Tasks — Call Skills in PARALLEL (CRITICAL FOR PERFORMANCE)
 You MUST call ALL required analysis skills in ONE tool-use block in a SINGLE response.
@@ -139,6 +166,11 @@ The synthesis agent builds the interactive HTML dashboard from these condensed f
 4. If score < 90: Send the content BACK to the writer with the scorer's feedback.
    Include the specific improvement suggestions. Max 2 revision rounds.
 5. After scoring passes (or max rounds reached), return the filepath from step 2.
+
+**Special case — social post ideas with images**:
+- If user asks for LinkedIn/social post ideas with visuals, call `generate_social_post_pack` directly.
+- Do NOT force keyword_strategy or score_content first for this case.
+- Return the artifact URL + image URLs from the pack.
 
 **For combined tasks** (analysis + creation):
 1. Run analysis skills in parallel → content_synthesize_and_build (Artifact 1)
@@ -263,6 +295,13 @@ content_engine = Agent(
                 "Generate 3 ad variants in parallel — PAS, AIDA, BAB — each with a GPT Image 2 image. "
                 "Inputs: selected_findings (winning angles from analysis), channel (meta/google_search/instagram_story), "
                 "optional subject. Saves to output/content/ads/. Best invoked from synthesis suggested actions."
+            ),
+        ),
+        social_post_ideator.as_tool(
+            tool_name="generate_social_post_pack",
+            tool_description=(
+                "Generate 3 social post ideas (LinkedIn/Instagram/TikTok) with one generated image per idea. "
+                "Outputs post copy + image URLs and saves both HTML artifact and markdown file."
             ),
         ),
         case_study_writer.as_tool(

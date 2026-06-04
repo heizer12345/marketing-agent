@@ -42,11 +42,21 @@ export type Artifact = {
   complete: boolean;
 };
 
+/** One completed user → assistant exchange in a thread. */
+export type ChatTurn = {
+  id: string;
+  userPrompt: string;
+  assistantMarkdown: string;
+  created_at: number;
+};
+
 export type ChatSession = {
   id: string;
   ticket_id?: string;
   title: string;
   created_at: number;
+  /** Prior messages in this conversation (oldest first). */
+  turns: ChatTurn[];
   planner?: Planner;
   subagents: SubAgent[];
   artifact: Artifact;
@@ -81,4 +91,5 @@ export type MemoryState = {
   principles: Array<{ slug: string; name: string; summary?: string; [k: string]: any }>;
   winners: { ads: any[]; blogs: any[]; landing_pages: any[]; case_studies: any[] };
   api_status: Record<string, boolean>;
+  api_status_detail?: Record<string, { ok?: boolean; detail?: string; sessions_7d?: string }>;
 };

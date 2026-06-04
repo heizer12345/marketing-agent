@@ -29,7 +29,7 @@ if config.META_ACCESS_TOKEN:
     _available_sources.append("Meta Ads")
 if config.GOOGLE_ADS_REFRESH_TOKEN:
     _available_sources.append("Google Ads")
-if config.GA4_PROPERTY_ID:
+if config.has_ga4_configured():
     _available_sources.append("GA4")
 if getattr(config, "INSTAGRAM_BUSINESS_ACCOUNT_ID", ""):
     _available_sources.append("Instagram")

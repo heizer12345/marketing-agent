@@ -69,7 +69,9 @@ export default function MemoryPage() {
           {section === "design" && <DesignEditor design={state.design_system} onSaved={() => { setSavedAt(Date.now()); reload(); }} />}
           {section === "logo" && <LogoUploader design={state.design_system} onSaved={() => { setSavedAt(Date.now()); reload(); }} />}
           {section === "knowledge" && <KnowledgePanel principles={state.principles} winners={state.winners} />}
-          {section === "api" && <ApiStatus status={state.api_status} />}
+          {section === "api" && (
+            <ApiStatus status={state.api_status} detail={state.api_status_detail} />
+          )}
         </div>
       </div>
     </div>

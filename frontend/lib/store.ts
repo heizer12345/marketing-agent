@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import type { ChatSession, Finding, SubAgent, SuggestedAction, WSEvent } from "./types";
+import type { ChatSession, ChatTurn, Finding, SubAgent, SuggestedAction, WSEvent } from "./types";
 
 const newId = () => Math.random().toString(36).slice(2, 10);
 
@@ -23,10 +23,14 @@ type State = {
   clearSelected: (sessionId: string) => void;
   /** Optimistically show planner state immediately on user send. */
   markSubmitting: (sessionId: string, prompt: string) => void;
+  /** Persist backend ticket id on the session (avoids duplicate sidebar rows on hydrate). */
+  linkTicketId: (sessionId: string, ticketId: string) => void;
   /** Delete a chat session entirely — both local and backend. */
   deleteSession: (sessionId: string) => void;
   /** Bulk-purge backend tickets that have no messages (empty 'New chat'). */
   cleanupEmptyTickets: () => Promise<number>;
+  /** Remove broken / duplicate / empty sessions from the sidebar. */
+  pruneBrokenSessions: () => Promise<number>;
   /** Merge any backend tickets that aren't already in the local store.
    * Used on /chat mount so server-side runs (scripts, other devices) show up. */
   hydrateFromBackend: () => Promise<void>;
@@ -35,14 +39,107 @@ type State = {
   rehydrateSessionFromBackend: (sessionId: string) => Promise<void>;
 };
 
+const emptyArtifact = (): ChatSession["artifact"] => ({
+  markdown: "",
+  citation_refs: [],
+  suggested_actions: [],
+  complete: false,
+});
+
 const blankSession = (title: string): ChatSession => ({
   id: newId(),
   title,
   created_at: Date.now(),
+  turns: [],
   subagents: [],
-  artifact: { markdown: "", citation_refs: [], suggested_actions: [], complete: false },
+  artifact: emptyArtifact(),
   status: "idle",
 });
+
+/** Move the current planner + artifact into turns before starting a new message. */
+function archiveCurrentTurn(s: ChatSession): ChatTurn[] {
+  const turns = [...(s.turns ?? [])];
+  const prompt = s.planner?.prompt?.trim();
+  if (!prompt) return turns;
+  const answer = (s.artifact?.markdown || s.planner?.text || "").trim();
+  if (!answer) return turns;
+  const last = turns[turns.length - 1];
+  if (last?.userPrompt === prompt && last?.assistantMarkdown === answer) return turns;
+  turns.push({
+    id: newId(),
+    userPrompt: prompt,
+    assistantMarkdown: answer,
+    created_at: Date.now(),
+  });
+  return turns;
+}
+
+/** Build turns from backend ticket messages (user/assistant pairs). */
+function turnsFromMessages(messages: Array<{ role: string; content: string }>): {
+  turns: ChatTurn[];
+  pendingUser: string | null;
+  lastAssistant: string | null;
+} {
+  const turns: ChatTurn[] = [];
+  let pendingUser: string | null = null;
+  let lastAssistant: string | null = null;
+
+  for (const m of messages) {
+    if (m.role === "user") {
+      if (pendingUser) {
+        turns.push({
+          id: newId(),
+          userPrompt: pendingUser,
+          assistantMarkdown: lastAssistant || "",
+          created_at: Date.now(),
+        });
+        lastAssistant = null;
+      }
+      pendingUser = m.content;
+    } else if (m.role === "assistant") {
+      lastAssistant = m.content;
+    }
+  }
+
+  if (pendingUser && lastAssistant) {
+    turns.push({
+      id: newId(),
+      userPrompt: pendingUser,
+      assistantMarkdown: lastAssistant,
+      created_at: Date.now(),
+    });
+    pendingUser = null;
+    lastAssistant = null;
+  }
+
+  return { turns, pendingUser, lastAssistant };
+}
+
+function dedupeSessionsByTicket(sessions: ChatSession[]): ChatSession[] {
+  const byTicket = new Map<string, ChatSession>();
+  const out: ChatSession[] = [];
+  for (const s of sessions) {
+    if (!s.ticket_id) {
+      out.push(s);
+      continue;
+    }
+    const prev = byTicket.get(s.ticket_id);
+    if (!prev) {
+      byTicket.set(s.ticket_id, s);
+      out.push(s);
+      continue;
+    }
+    // Keep the session with more content / turns
+    const score = (x: ChatSession) =>
+      (x.turns?.length ?? 0) + (x.artifact?.markdown ? 1 : 0) + (x.planner ? 1 : 0);
+    if (score(s) > score(prev)) {
+      const idx = out.indexOf(prev);
+      if (idx >= 0) out[idx] = s;
+      byTicket.set(s.ticket_id, s);
+    }
+  }
+  return out;
+}
 
 export const useChatStore = create<State>()(persist((set, get) => ({
   sessions: [],
@@ -199,22 +296,28 @@ export const useChatStore = create<State>()(persist((set, get) => ({
     selectedSubagentIds: { ...st.selectedSubagentIds, [sessionId]: {} },
   })),
 
+  linkTicketId: (sessionId, ticketId) => set((st) => ({
+    sessions: st.sessions.map((s) =>
+      s.id === sessionId ? { ...s, ticket_id: ticketId } : s,
+    ),
+  })),
+
   markSubmitting: (sessionId, prompt) => set((st) => ({
     sessions: st.sessions.map((s) => {
       if (s.id !== sessionId) return s;
-      // Show a planner card immediately so the user sees feedback. The backend's
-      // planner_started event will overwrite this with the real agent name.
+      const turns = archiveCurrentTurn(s);
       return {
         ...s,
+        turns,
         status: "running",
-        planner: s.planner ?? {
+        planner: {
           id: "pending",
           name: "Planner",
           prompt,
           text: "",
           activity: "Connecting to the planner…",
         },
-        artifact: { markdown: "", citation_refs: [], suggested_actions: [], complete: false },
+        artifact: emptyArtifact(),
         subagents: [],
       };
     }),
@@ -242,15 +345,58 @@ export const useChatStore = create<State>()(persist((set, get) => ({
       const r = await fetch("/api/v2/cleanup/empty-tickets", { method: "POST", credentials: "include" });
       if (r.ok) {
         const data = await r.json();
-        // Remove any local sessions whose ticket_id got deleted.
         const deleted = new Set<string>(data.deleted_ticket_ids ?? []);
         set((st) => ({
-          sessions: st.sessions.filter((s) => !s.ticket_id || !deleted.has(s.ticket_id)),
+          sessions: dedupeSessionsByTicket(
+            st.sessions.filter((s) => !s.ticket_id || !deleted.has(s.ticket_id)),
+          ),
         }));
         return data.deleted_count ?? 0;
       }
     } catch { /* ignore */ }
     return 0;
+  },
+
+  pruneBrokenSessions: async () => {
+    let backendDeleted = new Set<string>();
+    try {
+      const r = await fetch("/api/v2/cleanup/broken-tickets", { method: "POST", credentials: "include" });
+      if (r.ok) {
+        const data = await r.json();
+        backendDeleted = new Set<string>(data.deleted_ticket_ids ?? []);
+      }
+    } catch { /* ignore */ }
+
+    let removed = 0;
+    set((st) => {
+      const before = st.sessions.length;
+      const kept = st.sessions.filter((s) => {
+        if (s.ticket_id && backendDeleted.has(s.ticket_id)) return false;
+        if (s.status === "error") return false;
+        const empty =
+          !s.ticket_id &&
+          (s.turns?.length ?? 0) === 0 &&
+          !s.planner &&
+          !s.artifact?.markdown &&
+          s.title === "New chat";
+        if (empty) return false;
+        const stuck =
+          s.status === "running" &&
+          !s.planner?.text &&
+          !s.artifact?.markdown &&
+          (s.turns?.length ?? 0) === 0;
+        if (stuck) return false;
+        return true;
+      });
+      const sessions = dedupeSessionsByTicket(kept);
+      removed = before - sessions.length;
+      const activeStill = sessions.some((x) => x.id === st.activeSessionId);
+      return {
+        sessions,
+        activeSessionId: activeStill ? st.activeSessionId : (sessions[0]?.id ?? null),
+      };
+    });
+    return removed;
   },
 
   hydrateFromBackend: async () => {
@@ -279,16 +425,38 @@ export const useChatStore = create<State>()(persist((set, get) => ({
             t.status === "failed" ? "error" :
             t.status === "deleted" ? "error" :
             (s.status === "running" ? "running" : "idle");
-          // Don't downgrade a session that's actively running in this tab.
-          const nextStatus = s.status === "running" && backendStatus === "idle" ? "running" : backendStatus;
+          // Keep local "running" only when the server still looks in-flight.
+          const nextStatus =
+            s.status === "running" && backendStatus === "idle" ? "running" :
+            s.status === "running" && backendStatus === "complete" ? "complete" :
+            backendStatus;
           // Title sync — server-side scripts often have richer titles
           const nextTitle = t.title && t.title !== "New chat" ? t.title : s.title;
           return { ...s, status: nextStatus, title: nextTitle };
         });
 
-        // (b) Add any backend tickets we don't have locally yet.
-        const knownTicketIds = new Set(
+        // (b) Link orphan local sessions to backend tickets (same title, no ticket_id).
+        const claimedTickets = new Set(
           updated.map((s) => s.ticket_id).filter(Boolean) as string[],
+        );
+        const linked = updated.map((s) => {
+          if (s.ticket_id) return s;
+          const match = tickets.find(
+            (t) =>
+              t.status !== "deleted" &&
+              t.title &&
+              t.title === s.title &&
+              !claimedTickets.has(t.id),
+          );
+          if (match) {
+            claimedTickets.add(match.id);
+            return { ...s, ticket_id: match.id };
+          }
+          return s;
+        });
+
+        const knownTicketIds = new Set(
+          linked.map((s) => s.ticket_id).filter(Boolean) as string[],
         );
         const incoming: ChatSession[] = [];
         for (const t of tickets) {
@@ -299,15 +467,16 @@ export const useChatStore = create<State>()(persist((set, get) => ({
             ticket_id: t.id,
             title: t.title || "Untitled",
             created_at: t.created_at ? new Date(t.created_at).getTime() : Date.now(),
+            turns: [],
             subagents: [],
-            artifact: { markdown: "", citation_refs: [], suggested_actions: [], complete: false },
+            artifact: emptyArtifact(),
             status: t.status === "completed" || t.status === "closed" ? "complete" :
                     t.status === "failed" ? "error" : "idle",
           });
         }
 
-        const merged = [...updated, ...incoming].sort(
-          (a, b) => b.created_at - a.created_at,
+        const merged = dedupeSessionsByTicket(
+          [...linked, ...incoming].sort((a, b) => b.created_at - a.created_at),
         );
         return { sessions: merged };
       });
@@ -325,34 +494,86 @@ export const useChatStore = create<State>()(persist((set, get) => ({
     try {
       const detail = await fetchJSON<{
         title?: string;
+        status?: string;
         messages?: Array<{ role: string; content: string }>;
         artifacts?: Array<{ file_path: string }>;
       }>(`/api/tickets/${s.ticket_id}`);
-      // Pull the last assistant message as the artifact body (best-effort).
-      const assistantMsgs = (detail.messages ?? []).filter((m) => m.role === "assistant");
-      const lastAssistant = assistantMsgs[assistantMsgs.length - 1]?.content || "";
-      const userMsgs = (detail.messages ?? []).filter((m) => m.role === "user");
-      const firstUser = userMsgs[0]?.content || "";
+
+      const msgs = detail.messages ?? [];
+      const { turns, pendingUser, lastAssistant } = turnsFromMessages(msgs);
+      const done =
+        detail.status === "completed" ||
+        detail.status === "closed" ||
+        (!!lastAssistant && !pendingUser);
 
       set((st2) => ({
         sessions: st2.sessions.map((x) => {
           if (x.id !== sessionId) return x;
+          const isRunning = x.status === "running" && !done;
+
+          // Upgrade legacy sessions: one visible exchange → first turn in history.
+          if (
+            !isRunning &&
+            (x.turns?.length ?? 0) === 0 &&
+            x.artifact?.markdown &&
+            x.planner?.prompt &&
+            msgs.length <= 2
+          ) {
+            return {
+              ...x,
+              turns: archiveCurrentTurn(x),
+              planner: undefined,
+              artifact: emptyArtifact(),
+              status: "complete",
+            };
+          }
+
+          if (isRunning && x.planner) {
+            return {
+              ...x,
+              turns: turns.length > (x.turns?.length ?? 0) ? turns : x.turns,
+            };
+          }
+
+          if (pendingUser && !lastAssistant) {
+            return {
+              ...x,
+              turns,
+              planner: x.planner ?? {
+                id: "rehydrated",
+                name: "Planner",
+                prompt: pendingUser,
+                text: "",
+              },
+              artifact: x.artifact?.markdown ? x.artifact : emptyArtifact(),
+              status: isRunning ? x.status : "complete",
+            };
+          }
+
+          if (pendingUser && lastAssistant) {
+            return {
+              ...x,
+              turns: [
+                ...turns,
+                {
+                  id: newId(),
+                  userPrompt: pendingUser,
+                  assistantMarkdown: lastAssistant,
+                  created_at: Date.now(),
+                },
+              ],
+              planner: undefined,
+              artifact: emptyArtifact(),
+              status: "complete",
+            };
+          }
+
           return {
             ...x,
-            planner: x.planner ?? (firstUser ? {
-              id: "rehydrated",
-              name: "Past run",
-              prompt: firstUser,
-              text: "",
-              activity: undefined,
-            } : x.planner),
-            artifact: lastAssistant ? {
-              markdown: lastAssistant,
-              citation_refs: [],
-              suggested_actions: [],
-              complete: true,
-            } : x.artifact,
-            status: x.status === "idle" ? "complete" : x.status,
+            turns,
+            planner: undefined,
+            artifact: emptyArtifact(),
+            status: done ? "complete" : x.status,
           };
         }),
       }));
@@ -371,9 +592,7 @@ export const useChatStore = create<State>()(persist((set, get) => ({
       title: s.title,
       created_at: s.created_at,
       status: s.status,
-      // Preserve the result the user already saw so reload still shows it,
-      // but skip transient sub-agent / streaming-deltas state to keep
-      // localStorage small.
+      turns: s.turns ?? [],
       planner: s.planner ? {
         id: s.planner.id,
         name: s.planner.name,
@@ -385,7 +604,16 @@ export const useChatStore = create<State>()(persist((set, get) => ({
     })),
     activeSessionId: state.activeSessionId,
   }) as any,
-  version: 1,
+  version: 2,
+  migrate: (persisted: any, version) => {
+    if (version < 2 && persisted?.sessions) {
+      persisted.sessions = persisted.sessions.map((s: ChatSession) => ({
+        ...s,
+        turns: s.turns ?? [],
+      }));
+    }
+    return persisted as any;
+  },
 }));
 
 
