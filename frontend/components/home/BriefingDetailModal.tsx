@@ -2,23 +2,10 @@
 
 import type { ReactNode } from "react";
 import clsx from "clsx";
+import type { BriefingItem } from "@/lib/api";
 import { displayPublicPageUrl, resolveBriefingDetail } from "@/lib/briefingDetail";
 
-export type BriefingDetail = {
-  cause: string;
-  evidence: string;
-  pages: string[];
-  suggestion: string;
-  next_step: string;
-};
-
-export type BriefingItem = {
-  text: string;
-  severity?: string;
-  source: string;
-  priority?: string;
-  detail?: BriefingDetail;
-};
+export type { BriefingItem } from "@/lib/api";
 
 const SEVERITY_CHIP: Record<string, string> = {
   urgent: "chip-rose",

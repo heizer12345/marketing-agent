@@ -11,6 +11,8 @@ reference/
 !package.json
 !frontend/package.json
 !frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/vercel.json
 !skills-lock.json
 frontend/.next/
 frontend/node_modules/

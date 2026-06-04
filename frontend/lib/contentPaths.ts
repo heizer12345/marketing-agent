@@ -67,9 +67,9 @@ const REPORT_PATH_RE =
 
 export function extractContentMdPaths(markdown: string): string[] {
   const found = new Set<string>();
-  for (const m of markdown.matchAll(CONTENT_PATH_RE)) {
+  Array.from(markdown.matchAll(CONTENT_PATH_RE)).forEach((m) => {
     found.add(normalizeContentPath(m[1]));
-  }
+  });
   return [...found];
 }
 
