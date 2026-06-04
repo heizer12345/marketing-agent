@@ -1,0 +1,9 @@
+# Monorepo: prefer Python backend at repo root (ignore frontend/ for Nixpacks).
+[variables]
+NIXPACKS_PYTHON_VERSION = "3.12"
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "python main.py"

@@ -237,6 +237,10 @@ npm run dev
 Backend: `http://localhost:8000`
 Frontend: `http://localhost:3000`
 
-### Deploy to Railway
+### Deploy to Railway + Vercel
 
-The repo includes a `Procfile` and `runtime.txt` for Railway. Set all env vars in the Railway dashboard. The Next.js frontend can be deployed separately (Vercel) pointing to the Railway backend URL.
+Backend (Railway): deploy **repo root** (`python main.py`) — see `railway.toml`, `nixpacks.toml`, `Procfile`.
+
+Frontend (Vercel): deploy **`frontend/`** with `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_BACKEND_WS_URL` pointing at your Railway domain.
+
+**Step-by-step:** [docs/DEPLOY_RAILWAY_VERCEL.md](docs/DEPLOY_RAILWAY_VERCEL.md)

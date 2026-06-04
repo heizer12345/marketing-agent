@@ -1,0 +1,12 @@
+# Railway — backend service (repo root, NOT frontend/)
+# Link this repo to your project (e.g. "compassionate fascination") on Railway.
+
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/_health"
+healthcheckTimeout = 120
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
