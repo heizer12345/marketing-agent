@@ -1,34 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { apiUrl, getBackendOrigin } from "@/lib/backendUrl";
 
-type Status = "ok" | "missing_env" | "unreachable" | "unauthorized";
+type Status = "ok" | "missing_backend" | "unreachable" | "unauthorized";
 
 export function BackendStatusBanner() {
   const [status, setStatus] = useState<Status | null>(null);
+  const [detail, setDetail] = useState<string>("");
 
   useEffect(() => {
-    const onVercel =
-      typeof window !== "undefined" &&
-      (window.location.hostname.includes("vercel.app") ||
-        window.location.hostname.includes("vercel.sh"));
-
-    if (onVercel && !getBackendOrigin()) {
-      setStatus("missing_env");
-      return;
-    }
-
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(apiUrl("/_health"), { credentials: "include" });
+        const r = await fetch("/api/v2/memory/state", { credentials: "include" });
         if (cancelled) return;
-        if (r.status === 401) setStatus("unauthorized");
-        else if (!r.ok) setStatus("unreachable");
-        else setStatus("ok");
-      } catch {
-        if (!cancelled) setStatus("unreachable");
+        if (r.status === 401) {
+          setStatus("unauthorized");
+          return;
+        }
+        if (!r.ok) {
+          setStatus("unreachable");
+          setDetail(`${r.status} ${r.statusText}`);
+          return;
+        }
+        setStatus("ok");
+      } catch (e) {
+        if (cancelled) return;
+        const onVercel =
+          window.location.hostname.includes("vercel.app") ||
+          window.location.hostname.includes("vercel.sh");
+        setStatus(onVercel ? "missing_backend" : "unreachable");
+        setDetail(e instanceof Error ? e.message : "network error");
       }
     })();
     return () => {
@@ -39,20 +41,20 @@ export function BackendStatusBanner() {
   if (!status || status === "ok") return null;
 
   const copy: Record<Exclude<Status, "ok">, { title: string; body: string }> = {
-    missing_env: {
-      title: "Backend URL not configured",
+    missing_backend: {
+      title: "Python API not connected",
       body:
-        "In Vercel → Settings → Environment Variables, set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your API host (e.g. Railway), then redeploy. Chat and Home need the Python backend — the UI alone is not enough.",
+        "This Vercel site is only the UI. Deploy the backend (Railway/Render: python main.py), then in Vercel → Settings → Environment Variables set NEXT_PUBLIC_BACKEND_URL=https://your-api-host (no trailing slash) and NEXT_PUBLIC_BACKEND_WS_URL=wss://your-api-host. On the backend set V2_PUBLIC_ACCESS=1. Redeploy Vercel after saving env vars.",
     },
     unreachable: {
-      title: "Cannot reach the marketing API",
+      title: "Marketing API returned an error",
       body:
-        "Check that the backend is running, NEXT_PUBLIC_BACKEND_URL points to it, and CORS_ORIGINS on the backend includes this site URL. Redeploy both after changing env vars.",
+        "The UI reached a proxy but the backend failed. Confirm the API is running, NEXT_PUBLIC_BACKEND_URL is correct, and you redeployed Vercel after changing it. Backend env: V2_PUBLIC_ACCESS=1.",
     },
     unauthorized: {
       title: "API blocked by login",
       body:
-        "On the backend host set DEV_MODE=1 or V2_PUBLIC_ACCESS=1 for prototype testing, or log in at your API /login before using this app.",
+        "On the backend host set V2_PUBLIC_ACCESS=1 (or DEV_MODE=1) for prototype testing, then restart the API.",
     },
   };
 
@@ -66,6 +68,7 @@ export function BackendStatusBanner() {
     >
       <span className="font-semibold">{msg.title}. </span>
       {msg.body}
+      {detail ? <span className="block mt-1 opacity-80">({detail})</span> : null}
     </div>
   );
 }

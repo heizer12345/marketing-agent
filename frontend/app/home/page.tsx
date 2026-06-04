@@ -193,10 +193,10 @@ export default function HomePage() {
           <div className="text-sm font-semibold" style={{ color: "#B91C1C" }}>Could not load briefing data</div>
           <div className="text-[12px] mt-1" style={{ color: "#7F1D1D" }}>{apiError}</div>
           <p className="text-[12px] mt-2" style={{ color: "#7F1D1D" }}>
-            Deploy the Python backend and set Vercel env vars{" "}
+            Deploy the Python backend on Railway/Render, then set Vercel env{" "}
             <code className="text-[11px]">NEXT_PUBLIC_BACKEND_URL</code> and{" "}
-            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_WS_URL</code>. On the backend use{" "}
-            <code className="text-[11px]">V2_PUBLIC_ACCESS=1</code> for prototype access.
+            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_WS_URL</code> to that host and{" "}
+            <strong>redeploy</strong>. Backend: <code className="text-[11px]">V2_PUBLIC_ACCESS=1</code>.
           </p>
         </div>
       )}
