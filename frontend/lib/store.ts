@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { apiUrl } from "./backendUrl";
 import type { ChatSession, ChatTurn, Finding, SubAgent, SuggestedAction, WSEvent } from "./types";
 
 const newId = () => Math.random().toString(36).slice(2, 10);
@@ -342,7 +343,7 @@ export const useChatStore = create<State>()(persist((set, get) => ({
 
   cleanupEmptyTickets: async () => {
     try {
-      const r = await fetch("/api/v2/cleanup/empty-tickets", { method: "POST", credentials: "include" });
+      const r = await fetch(apiUrl("/api/v2/cleanup/empty-tickets"), { method: "POST", credentials: "include" });
       if (r.ok) {
         const data = await r.json();
         const deleted = new Set<string>(data.deleted_ticket_ids ?? []);
@@ -360,7 +361,7 @@ export const useChatStore = create<State>()(persist((set, get) => ({
   pruneBrokenSessions: async () => {
     let backendDeleted = new Set<string>();
     try {
-      const r = await fetch("/api/v2/cleanup/broken-tickets", { method: "POST", credentials: "include" });
+      const r = await fetch(apiUrl("/api/v2/cleanup/broken-tickets"), { method: "POST", credentials: "include" });
       if (r.ok) {
         const data = await r.json();
         backendDeleted = new Set<string>(data.deleted_ticket_ids ?? []);
@@ -404,7 +405,7 @@ export const useChatStore = create<State>()(persist((set, get) => ({
       // First, ask the server to reap stuck jobs older than 10 min so we don't
       // pull a 'running' status that's actually dead.
       try {
-        await fetch("/api/v2/cleanup/stuck-jobs", { method: "POST", credentials: "include" });
+        await fetch(apiUrl("/api/v2/cleanup/stuck-jobs"), { method: "POST", credentials: "include" });
       } catch { /* best-effort */ }
 
       const tickets = await fetchJSON<Array<{
@@ -618,8 +619,9 @@ export const useChatStore = create<State>()(persist((set, get) => ({
 
 
 async function fetchJSON<T>(url: string): Promise<T> {
-  const r = await fetch(url, { credentials: "include" });
-  if (!r.ok) throw new Error(`${url} → ${r.status}`);
+  const full = url.startsWith("http") ? url : apiUrl(url);
+  const r = await fetch(full, { credentials: "include" });
+  if (!r.ok) throw new Error(`${full} → ${r.status}`);
   return r.json();
 }
 

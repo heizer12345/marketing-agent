@@ -1,6 +1,7 @@
 import "./globals.css";
 import type { Metadata } from "next";
 import { Sidebar } from "@/components/shell/Sidebar";
+import { BackendStatusBanner } from "@/components/shell/BackendStatusBanner";
 import { OnboardingGate } from "@/components/onboarding/OnboardingGate";
 
 export const metadata: Metadata = {
@@ -15,6 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex h-screen w-screen overflow-hidden">
           <Sidebar />
           <main className="flex-1 overflow-hidden flex flex-col">
+            <BackendStatusBanner />
             <OnboardingGate>{children}</OnboardingGate>
           </main>
         </div>

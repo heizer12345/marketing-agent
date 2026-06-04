@@ -3,12 +3,12 @@ import { notFound } from "next/navigation";
 import { ContentPreviewPage } from "@/components/content/ContentPreviewPage";
 import { displayTitleFromPath, parseMarkdownDocument } from "@/lib/markdownContent";
 
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+import { apiUrl } from "@/lib/backendUrl";
 
 async function loadMarkdown(segments: string[]): Promise<string | null> {
   const rel = segments.join("/");
   try {
-    const r = await fetch(`${BACKEND}/content/${rel}`, { cache: "no-store" });
+    const r = await fetch(apiUrl(`/content/${rel}`), { cache: "no-store" });
     if (!r.ok) return null;
     return r.text();
   } catch {

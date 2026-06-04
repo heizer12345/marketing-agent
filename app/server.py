@@ -151,6 +151,20 @@ _model_provider = OpenAIProvider(openai_client=_openai_client)
 _run_config = RunConfig(model_provider=_model_provider)
 
 app = FastAPI(title="Sourcy Marketing Analyst")
+
+_cors_raw = os.environ.get("CORS_ORIGINS", "").strip()
+if _cors_raw:
+    from fastapi.middleware.cors import CORSMiddleware
+
+    _cors_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
 app.mount("/reports", StaticFiles(directory=str(config.OUTPUT_DIR)), name="reports")
 app.mount("/content", StaticFiles(directory=str(config.CONTENT_OUTPUT_DIR)), name="content")
 app.mount("/reviews", StaticFiles(directory=str(config.REVIEWS_OUTPUT_DIR)), name="reviews")
@@ -184,6 +198,11 @@ _has_posthog = bool(getattr(config, "POSTHOG_API_KEY", ""))
 @app.on_event("startup")
 async def startup():
     await db.init_db()
+
+
+@app.get("/_health")
+async def health():
+    return {"ok": True, "service": "sourcy-marketing-analyst"}
 
 
 @app.get("/")

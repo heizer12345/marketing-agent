@@ -11,6 +11,8 @@ load_dotenv()
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin123")
 DEV_MODE = os.getenv("DEV_MODE", "0") == "1"
+# Prototype / Vercel: allow v2 REST + WS without session login (set on backend host only).
+V2_PUBLIC_ACCESS = os.getenv("V2_PUBLIC_ACCESS", "0") == "1"
 
 _PASS_THROUGH = {"/login", "/logout", "/_health"}
 
@@ -85,13 +87,22 @@ async def logout(request: Request):
     return RedirectResponse("/login", status_code=302)
 
 
+def _is_public_v2_path(path: str) -> bool:
+    return V2_PUBLIC_ACCESS and (
+        path.startswith("/api/v2")
+        or path.startswith("/ws")
+        or path.startswith("/reports/")
+        or path.startswith("/content/")
+    )
+
+
 class AuthMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         if DEV_MODE:
             return await call_next(request)
 
         path = request.url.path
-        if path in _PASS_THROUGH or path.startswith("/static"):
+        if path in _PASS_THROUGH or path.startswith("/static") or _is_public_v2_path(path):
             return await call_next(request)
 
         user = request.session.get("user")
@@ -107,7 +118,7 @@ class AuthMiddleware(BaseHTTPMiddleware):
 
 async def require_session(websocket) -> bool:
     """Return True if WS session is valid; close with 1008 and return False if not."""
-    if DEV_MODE:
+    if DEV_MODE or V2_PUBLIC_ACCESS:
         return True
     user = websocket.session.get("user") if hasattr(websocket, "session") else None
     if not user:

@@ -4,15 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useChatStore } from "./store";
 import type { WSEvent } from "./types";
 
-/** Direct connect to the FastAPI backend WS. Next.js rewrites don't proxy
- * WebSockets, so we hit :8000 ourselves. */
-function wsUrl(path: string): string {
-  if (typeof window === "undefined") return "";
-  const envUrl = process.env.NEXT_PUBLIC_BACKEND_WS_URL;
-  if (envUrl) return `${envUrl.replace(/\/$/, "")}${path}`;
-  const proto = window.location.protocol === "https:" ? "wss" : "ws";
-  return `${proto}://${window.location.hostname}:8000${path}`;
-}
+import { wsUrl as backendWsUrl } from "./backendUrl";
 
 /**
  * Module-level WebSocket cache, keyed by ticketId.
@@ -41,7 +33,7 @@ function acquire(ticketId: string, onEvent: (ev: WSEvent) => void, onState: (con
     entry.closeTimer = null;
   }
   if (!entry) {
-    const ws = new WebSocket(wsUrl(`/ws/${ticketId}`));
+    const ws = new WebSocket(backendWsUrl(`/ws/${ticketId}`));
     // eslint-disable-next-line no-console
     console.info(`[ws] opening ${ticketId.slice(0, 8)}`);
     entry = { ws, consumers: 0, closeTimer: null };

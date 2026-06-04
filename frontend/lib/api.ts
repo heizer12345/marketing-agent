@@ -1,6 +1,12 @@
 import type { MemoryState } from "./types";
+import { apiUrl } from "./backendUrl";
 
 const API = "/api/v2";
+
+function v2(path: string): string {
+  const p = path.startsWith("/") ? path : `/${path}`;
+  return apiUrl(`/api/v2${p}`);
+}
 
 /** Drill-down detail for Home briefing cards (alerts, recommendations). */
 export type BriefingDetail = {
@@ -50,21 +56,21 @@ async function jsonFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  memoryState: () => jsonFetch<MemoryState>(`${API}/memory/state`),
+  memoryState: () => jsonFetch<MemoryState>(v2("/memory/state")),
   savePersona: (persona: Record<string, any>, name = "sourcy") =>
-    jsonFetch(`${API}/setup/persona`, { method: "POST", body: JSON.stringify({ name, persona }) }),
+    jsonFetch(v2("/setup/persona"), { method: "POST", body: JSON.stringify({ name, persona }) }),
   saveDesignSystem: (design_system: Record<string, any>, name = "sourcy") =>
-    jsonFetch(`${API}/setup/design-system`, { method: "POST", body: JSON.stringify({ name, design_system }) }),
+    jsonFetch(v2("/setup/design-system"), { method: "POST", body: JSON.stringify({ name, design_system }) }),
   uploadAsset: async (file: File, asset_type = "logo", tag = "") => {
     const fd = new FormData();
     fd.append("file", file);
     fd.append("asset_type", asset_type);
     fd.append("tag", tag);
-    const r = await fetch(`${API}/setup/upload-asset`, { method: "POST", body: fd, credentials: "include" });
+    const r = await fetch(v2("/setup/upload-asset"), { method: "POST", body: fd, credentials: "include" });
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
     return r.json() as Promise<{ ok: boolean; url: string; asset_type: string; tag: string }>;
   },
-  homeRefresh: () => jsonFetch<{ seed_prompt: string; agents_to_dispatch: string[] }>(`${API}/home/refresh`),
+  homeRefresh: () => jsonFetch<{ seed_prompt: string; agents_to_dispatch: string[] }>(v2("/home/refresh")),
   homeSnapshot: (force = false) =>
     jsonFetch<{
       snapshot: {
@@ -80,11 +86,11 @@ export const api = {
       dashboard: null | { url: string; generated_at: number; size_kb: number };
       stale: boolean;
       refreshing: boolean;
-    }>(`${API}/home/snapshot${force ? "?force=true" : ""}`),
-  homeForceRefresh: () => jsonFetch<{ ok: boolean; queued: boolean }>(`${API}/home/refresh`, { method: "POST" }),
+    }>(v2(`/home/snapshot${force ? "?force=true" : ""}`)),
+  homeForceRefresh: () => jsonFetch<{ ok: boolean; queued: boolean }>(v2("/home/refresh"), { method: "POST" }),
   kpiTrend: (label: string, source: string) =>
     jsonFetch<KpiTrendResponse>(
-      `${API}/home/kpi-trend?${new URLSearchParams({ label, source })}`,
+      v2(`/home/kpi-trend?${new URLSearchParams({ label, source })}`),
     ),
   library: (type: string) =>
     jsonFetch<{
@@ -98,7 +104,7 @@ export const api = {
         ext: string;
         from_session?: { ticket_id: string; ticket_title: string };
       }>;
-    }>(`${API}/library/${type}`),
+    }>(v2(`/library/${type}`)),
 
   sessionArtifacts: (ticket_id: string) =>
     jsonFetch<{
@@ -106,7 +112,7 @@ export const api = {
       ticket_title: string | null;
       count: number;
       artifacts: Array<{ url: string; name: string; kind: "image" | "html" | "doc"; ext: string; created_at?: string }>;
-    }>(`${API}/sessions/${ticket_id}/artifacts`),
+    }>(v2(`/sessions/${ticket_id}/artifacts`)),
   dispatch: (action_id: string, body: {
     selected_findings?: any[];
     selected_agents?: string[];
@@ -116,11 +122,11 @@ export const api = {
     ticket_id?: string;
   }) =>
     jsonFetch<{ ok: boolean; target_skill?: string; seed_prompt?: string; error?: string }>(
-      `${API}/dispatch/${action_id}`,
+      v2(`/dispatch/${action_id}`),
       { method: "POST", body: JSON.stringify(body) },
     ),
 
   // Legacy ticket API (the existing FastAPI endpoints we re-use for ticket-scoped WS)
   createTicket: (title: string, created_by: string) =>
-    jsonFetch<{ id: string }>(`/api/tickets`, { method: "POST", body: JSON.stringify({ title, created_by }) }),
+    jsonFetch<{ id: string }>(apiUrl("/api/tickets"), { method: "POST", body: JSON.stringify({ title, created_by }) }),
 };

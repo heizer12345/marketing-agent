@@ -29,6 +29,7 @@ export default function ChatPage() {
   const [pendingPrompt, setPendingPrompt] = useState<string | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [stepsUserToggled, setStepsUserToggled] = useState(false);
+  const [ticketError, setTicketError] = useState<string | null>(null);
   const promptRef = useRef<PromptBarHandle>(null);
 
   useEffect(() => {
@@ -60,12 +61,15 @@ export default function ChatPage() {
       updateTitle(title);
     }
     markSubmitting(active.id, prompt);
+    setTicketError(null);
     if (!active.ticket_id) {
       try {
-        const r = await api.createTicket(title, "Eugene");
+        const r = await api.createTicket(title, "user");
         linkTicketId(active.id, r.id);
         setTicketId(r.id);
       } catch (e) {
+        const msg = e instanceof Error ? e.message : "Could not create chat session";
+        setTicketError(msg);
         console.warn("ticket create failed", e);
         return;
       }
@@ -178,6 +182,13 @@ export default function ChatPage() {
             </header>
 
             {showQuickStarts && <ChatQuickStarts onSelectCategory={handleQuickStart} />}
+
+            {ticketError && (
+              <div className="card p-4" style={{ background: "#FEF2F2", borderColor: "rgba(239,68,68,0.3)" }}>
+                <div className="text-sm font-semibold" style={{ color: "#B91C1C" }}>Chat cannot connect to the API</div>
+                <div className="text-xs mt-1" style={{ color: "#7F1D1D" }}>{ticketError}</div>
+              </div>
+            )}
 
             {hasContent && <ChatThread session={active} />}
 

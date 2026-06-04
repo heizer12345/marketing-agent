@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { api, type BriefingItem } from "@/lib/api";
+import { assetUrl } from "@/lib/backendUrl";
 import { AttentionCard } from "@/components/home/AttentionCard";
 import { BriefingDetailModal } from "@/components/home/BriefingDetailModal";
 import { KpiTrendModal, type KpiCard } from "@/components/home/KpiTrendModal";
@@ -43,6 +44,8 @@ export default function HomePage() {
   const [kpiTrend, setKpiTrend] = useState<KpiCard | null>(null);
   const [highlightFilter, setHighlightFilter] = useState<"all" | HighlightCategory>("all");
   const [showAllHighlights, setShowAllHighlights] = useState(false);
+  const [apiError, setApiError] = useState<string | null>(null);
+  const [pollCount, setPollCount] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -52,7 +55,11 @@ export default function HomePage() {
       setStale(r.stale);
       setRefreshing(r.refreshing);
       setLoadedAt(Date.now());
+      setApiError(null);
+      if (!r.refreshing) setPollCount(0);
     } catch (e) {
+      const msg = e instanceof Error ? e.message : "Could not load briefing";
+      setApiError(msg);
       console.warn("home snapshot failed", e);
     }
   }, []);
@@ -60,10 +67,14 @@ export default function HomePage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
-    if (!refreshing) return;
-    const t = setInterval(() => load(), 10000);
+    if (!refreshing || apiError) return;
+    if (pollCount >= 18) return;
+    const t = setInterval(() => {
+      setPollCount((n) => n + 1);
+      load();
+    }, 10000);
     return () => clearInterval(t);
-  }, [refreshing, load]);
+  }, [refreshing, load, apiError, pollCount]);
 
   useEffect(() => {
     if (!detailItem) return;
@@ -169,7 +180,7 @@ export default function HomePage() {
               {refreshing ? "Refreshing (~1-2 min)" : "Refresh"}
             </button>
             {dashboard && (
-              <a href={dashboard.url} target="_blank" rel="noreferrer" className="btn-ghost text-[12px]" title="Open the full dashboard in a new tab">
+              <a href={assetUrl(dashboard.url)} target="_blank" rel="noreferrer" className="btn-ghost text-[12px]" title="Open the full dashboard in a new tab">
                 Open ↗
               </a>
             )}
@@ -177,10 +188,29 @@ export default function HomePage() {
         </div>
       </header>
 
+      {apiError && (
+        <div className="mx-8 mt-6 card p-4" style={{ background: "#FEF2F2", borderColor: "rgba(239,68,68,0.3)" }}>
+          <div className="text-sm font-semibold" style={{ color: "#B91C1C" }}>Could not load briefing data</div>
+          <div className="text-[12px] mt-1" style={{ color: "#7F1D1D" }}>{apiError}</div>
+          <p className="text-[12px] mt-2" style={{ color: "#7F1D1D" }}>
+            Deploy the Python backend and set Vercel env vars{" "}
+            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_URL</code> and{" "}
+            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_WS_URL</code>. On the backend use{" "}
+            <code className="text-[11px]">V2_PUBLIC_ACCESS=1</code> for prototype access.
+          </p>
+        </div>
+      )}
+
+      {refreshing && pollCount >= 18 && !apiError && (
+        <div className="mx-8 mt-4 card p-3 text-[12px]" style={{ background: "#FFFBEB", borderColor: "rgba(245,158,11,0.3)", color: "#78350F" }}>
+          Briefing refresh is taking longer than usual (~3 min). The backend may still be analyzing, or the API connection may be slow — try Refresh again or check the banner above.
+        </div>
+      )}
+
       {dashboard && view === "dashboard" && (
         <div className="flex-1 relative" style={{ minHeight: "calc(100vh - 120px)" }}>
           <iframe
-            src={dashboard.url}
+            src={assetUrl(dashboard.url)}
             className="w-full h-full block border-0"
             style={{ minHeight: "calc(100vh - 120px)" }}
             title="Sourcy comprehensive dashboard"
