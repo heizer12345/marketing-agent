@@ -1,25 +1,32 @@
-# One-page setup (your live URLs)
+# One-page setup (prototype)
 
-You do **not** need to hunt through Vercel/Railway settings — use these direct links.
+**Recommended:** [Render frontend + Railway API](DEPLOY_RENDER.md) — no Vercel git/team issues.
 
 ## Your live URLs
 
 | Service | URL |
 |---------|-----|
-| **App (use this)** | https://marketing-agent-alpha-five.vercel.app |
 | **Railway API** | https://web-production-d1b50.up.railway.app |
-| **Wiring test** | https://marketing-agent-alpha-five.vercel.app/api/diagnostic |
-
-> Do **not** use long preview URLs (`marketing-agent-xxxxx-michael-sourcy-projects.vercel.app`) for sharing — they often require Vercel login.
+| **Render app** | *create via Blueprint — see below* |
+| **Vercel (optional)** | https://marketing-agent-alpha-five.vercel.app |
 
 ---
 
-## Already done for you
+## Render (fastest path)
 
-- Vercel env vars `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_BACKEND_WS_URL` → Railway
-- Vercel project (Michael account): `michael-sourcy-projects/marketing-agent`
-- GitHub repo: `heizer12345/marketing-agent` — commits must use **Michael’s GitHub email**, not `eugene@sourcy.ai`, or Vercel blocks deploy
-- Code fix: Railway auto-enables public API when running on Railway (commit `4f63ad5`)
+1. [render.com](https://render.com) → **New** → **Blueprint**
+2. Repo: `heizer12345/marketing-agent` → **Apply** (uses `render.yaml`)
+3. Share the `*.onrender.com` URL with reviewers
+
+Full steps: [DEPLOY_RENDER.md](DEPLOY_RENDER.md)
+
+---
+
+## Already in the repo
+
+- `render.yaml` — one-click Render frontend with Railway env vars pre-filled
+- GitHub: `heizer12345/marketing-agent`
+- Railway auto-enables `V2_PUBLIC_ACCESS` when deployed on Railway
 
 ---
 

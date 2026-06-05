@@ -15,12 +15,12 @@ export async function proxyToBackend(
   backendPath: string,
 ): Promise<NextResponse> {
   const origin = getServerBackendOrigin();
-  const onVercel = Boolean(process.env.VERCEL);
-  if (onVercel && !process.env.NEXT_PUBLIC_BACKEND_URL && !process.env.BACKEND_URL) {
+  const onCloud = Boolean(process.env.VERCEL || process.env.RENDER);
+  if (onCloud && !process.env.NEXT_PUBLIC_BACKEND_URL && !process.env.BACKEND_URL) {
     return NextResponse.json(
       {
         error: "Backend not configured",
-        hint: "Set NEXT_PUBLIC_BACKEND_URL on Vercel to your Railway URL, then redeploy.",
+        hint: "Set NEXT_PUBLIC_BACKEND_URL to your Railway URL on Render (or Vercel), then redeploy.",
       },
       { status: 503 },
     );

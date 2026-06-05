@@ -1,0 +1,19 @@
+# Render Blueprint — frontend only (API stays on Railway).
+# Deploy: https://dashboard.render.com/select-repo?type=blueprint
+services:
+  - type: web
+    name: marketing-agent-frontend
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: frontend
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/diagnostic
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NEXT_PUBLIC_BACKEND_URL
+        value: https://web-production-d1b50.up.railway.app
+      - key: NEXT_PUBLIC_BACKEND_WS_URL
+        value: wss://web-production-d1b50.up.railway.app

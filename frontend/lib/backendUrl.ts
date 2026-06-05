@@ -1,8 +1,7 @@
 /**
- * URL helpers for local dev vs Vercel + separate Python backend.
+ * URL helpers for local dev vs hosted frontend (Render/Vercel) + Railway API.
  *
- * REST (browser): always same-origin paths (/api/v2/...) so Vercel rewrites proxy
- * to NEXT_PUBLIC_BACKEND_URL — avoids CORS. Set that env on Vercel before deploy.
+ * REST (browser): same-origin paths (/api/v2/...) proxied to NEXT_PUBLIC_BACKEND_URL.
  *
  * WebSocket (browser): must use NEXT_PUBLIC_BACKEND_WS_URL (wss://your-api-host).
  */

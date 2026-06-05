@@ -13,7 +13,7 @@ export async function GET() {
     return NextResponse.json({
       ok: false,
       configured: false,
-      hint: "Set NEXT_PUBLIC_BACKEND_URL on Vercel to your Railway public URL.",
+      hint: "Set NEXT_PUBLIC_BACKEND_URL to your Railway public URL on Render (or Vercel), then redeploy.",
     });
   }
 

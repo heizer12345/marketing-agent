@@ -54,14 +54,14 @@ export function BackendStatusBanner() {
 
   const copy: Record<Exclude<Status, "ok">, { title: string; body: string }> = {
     missing_backend: {
-      title: "Railway URL not set on Vercel",
+      title: "Railway URL not set on the frontend host",
       body:
-        "Vercel → Settings → Environment Variables: set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your Railway public domain (https://… and wss://…). Save, then Redeploy. Railway must have V2_PUBLIC_ACCESS=1.",
+        "On Render (or Vercel) → Environment: set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your Railway domain (https://… and wss://…). Redeploy. Railway must have V2_PUBLIC_ACCESS=1.",
     },
     unreachable: {
-      title: "Vercel cannot reach Railway",
+      title: "Frontend cannot reach Railway",
       body:
-        "Check the Railway public domain opens /_health in your browser. Confirm NEXT_PUBLIC_BACKEND_URL matches exactly (no trailing slash). Redeploy Vercel after changing env vars.",
+        "Open your Railway /_health and /api/v2/memory/state in the browser. Confirm NEXT_PUBLIC_BACKEND_URL matches exactly (no trailing slash), then redeploy the frontend.",
     },
     unauthorized: {
       title: "Railway API blocked by login",
