@@ -18,6 +18,9 @@ reference/
 frontend/.next/
 frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
+frontend/next-err.log
+frontend/next-out.log
+server.log
 output/reports/*.html
 public/reports/*.html
 public/content/
