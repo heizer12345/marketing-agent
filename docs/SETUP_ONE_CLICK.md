@@ -16,8 +16,9 @@ You do **not** need to hunt through Vercel/Railway settings — use these direct
 
 ## Already done for you
 
-- Vercel env vars `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_BACKEND_WS_URL` → Railway (set 21h ago)
-- Vercel project linked: `michael-sourcy-projects/marketing-agent`
+- Vercel env vars `NEXT_PUBLIC_BACKEND_URL` and `NEXT_PUBLIC_BACKEND_WS_URL` → Railway
+- Vercel project (Michael account): `michael-sourcy-projects/marketing-agent`
+- GitHub repo: `heizer12345/marketing-agent` — commits must use **Michael’s GitHub email**, not `eugene@sourcy.ai`, or Vercel blocks deploy
 - Code fix: Railway auto-enables public API when running on Railway (commit `4f63ad5`)
 
 ---
