@@ -2,7 +2,16 @@
 
 import { useEffect, useState } from "react";
 
-type Status = "ok" | "missing_backend" | "unreachable" | "unauthorized";
+type Diagnostic = {
+  ok?: boolean;
+  configured?: boolean;
+  backend_host?: string;
+  health_status?: number;
+  error?: string;
+  hint?: string;
+};
+
+type Status = "ok" | "missing_backend" | "unreachable" | "unauthorized" | "vercel_sso";
 
 export function BackendStatusBanner() {
   const [status, setStatus] = useState<Status | null>(null);
@@ -12,24 +21,27 @@ export function BackendStatusBanner() {
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch("/api/v2/memory/state", { credentials: "include" });
+        const r = await fetch("/api/diagnostic", { credentials: "include" });
         if (cancelled) return;
         if (r.status === 401) {
-          setStatus("unauthorized");
+          setStatus("vercel_sso");
           return;
         }
-        if (!r.ok) {
+        const data = (await r.json()) as Diagnostic;
+        if (!data.configured) {
+          setStatus("missing_backend");
+          setDetail(data.hint || "");
+          return;
+        }
+        if (!data.ok) {
           setStatus("unreachable");
-          setDetail(`${r.status} ${r.statusText}`);
+          setDetail(data.error || `health ${data.health_status}`);
           return;
         }
         setStatus("ok");
       } catch (e) {
         if (cancelled) return;
-        const onVercel =
-          window.location.hostname.includes("vercel.app") ||
-          window.location.hostname.includes("vercel.sh");
-        setStatus(onVercel ? "missing_backend" : "unreachable");
+        setStatus("unreachable");
         setDetail(e instanceof Error ? e.message : "network error");
       }
     })();
@@ -42,19 +54,23 @@ export function BackendStatusBanner() {
 
   const copy: Record<Exclude<Status, "ok">, { title: string; body: string }> = {
     missing_backend: {
-      title: "Python API not connected",
+      title: "Railway URL not set on Vercel",
       body:
-        "This Vercel site is only the UI. Deploy the backend (Railway/Render: python main.py), then in Vercel → Settings → Environment Variables set NEXT_PUBLIC_BACKEND_URL=https://your-api-host (no trailing slash) and NEXT_PUBLIC_BACKEND_WS_URL=wss://your-api-host. On the backend set V2_PUBLIC_ACCESS=1. Redeploy Vercel after saving env vars.",
+        "Vercel → Settings → Environment Variables: set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your Railway public domain (https://… and wss://…). Save, then Redeploy. Railway must have V2_PUBLIC_ACCESS=1.",
     },
     unreachable: {
-      title: "Marketing API returned an error",
+      title: "Vercel cannot reach Railway",
       body:
-        "The UI reached a proxy but the backend failed. Confirm the API is running, NEXT_PUBLIC_BACKEND_URL is correct, and you redeployed Vercel after changing it. Backend env: V2_PUBLIC_ACCESS=1.",
+        "Check the Railway public domain opens /_health in your browser. Confirm NEXT_PUBLIC_BACKEND_URL matches exactly (no trailing slash). Redeploy Vercel after changing env vars.",
     },
     unauthorized: {
-      title: "API blocked by login",
+      title: "Railway API blocked by login",
+      body: "On Railway set V2_PUBLIC_ACCESS=1 and restart the service.",
+    },
+    vercel_sso: {
+      title: "Vercel Deployment Protection is blocking this site",
       body:
-        "On the backend host set V2_PUBLIC_ACCESS=1 (or DEV_MODE=1) for prototype testing, then restart the API.",
+        "Vercel → Project → Settings → Deployment Protection → disable for Preview (or add testers to your team). Preview URLs require Vercel login otherwise Home/Chat API calls fail with 401.",
     },
   };
 

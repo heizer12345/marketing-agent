@@ -90,13 +90,23 @@ CORS_ORIGINS=https://your-app.vercel.app
 Set for **Production** and **Preview**, then **Redeploy**:
 
 ```env
-NEXT_PUBLIC_BACKEND_URL=https://YOUR-RAILWAY-DOMAIN
-NEXT_PUBLIC_BACKEND_WS_URL=wss://YOUR-RAILWAY-DOMAIN
+NEXT_PUBLIC_BACKEND_URL=https://YOUR-RAILWAY-DOMAIN.up.railway.app
+NEXT_PUBLIC_BACKEND_WS_URL=wss://YOUR-RAILWAY-DOMAIN.up.railway.app
 ```
 
-No trailing slash. Use `https` / `wss` (Railway provides HTTPS).
+No trailing slash. Chat WebSockets use `NEXT_PUBLIC_BACKEND_WS_URL` directly.
 
-### 3. Redeploy
+**Test after deploy:** open `https://YOUR-VERCEL-URL/api/diagnostic` — should show `"ok": true` and your Railway host.
+
+### 3. Deployment Protection (common Vercel issue)
+
+If you see **Authentication Required** or 401 on preview URLs:
+
+**Vercel → Settings → Deployment Protection** → disable for Preview, or add testers to the team.
+
+Preview URLs like `marketing-agent-xxxx-michael-sourcy-projects.vercel.app` are locked by default on team projects.
+
+### 4. Redeploy
 
 Deployments → latest → **Redeploy** (env vars apply at **build** time for rewrites).
 
