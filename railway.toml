@@ -2,7 +2,8 @@
 # Link this repo to your project (e.g. "compassionate fascination") on Railway.
 
 [build]
-builder = "NIXPACKS"
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "python main.py"

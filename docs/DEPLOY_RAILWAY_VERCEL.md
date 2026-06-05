@@ -110,7 +110,7 @@ Deployments → latest → **Redeploy** (env vars apply at **build** time for re
 
 | Symptom | Fix |
 |--------|-----|
-| Railway build picks Node instead of Python | Ensure service root is repo root; `nixpacks.toml` is committed |
+| Railway build `pip: command not found` | Fixed in repo via `Dockerfile` — redeploy from latest `main` |
 | Vercel “Failed to fetch” | Set `NEXT_PUBLIC_BACKEND_URL`, redeploy Vercel |
 | Chat “Reconnecting…” | Set `NEXT_PUBLIC_BACKEND_WS_URL=wss://...` |
 | 401 on API | Railway: `V2_PUBLIC_ACCESS=1`, restart service |
