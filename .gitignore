@@ -1,4 +1,6 @@
 .env
+.env.vercel.local
+frontend/.env.vercel.local
 credentials/
 .DS_Store
 .claude/
@@ -33,3 +35,4 @@ __pycache__/
 .venv/
 venv/
 service-account-key.json
+.vercel
