@@ -24,9 +24,15 @@ Browser → Railway (repo root)    → REST via Vercel proxy + WebSocket direct 
 
 | Setting | Value |
 |--------|--------|
-| Root Directory | *(empty / repo root)* |
-| Start Command | `python main.py` *(or leave empty — uses `railway.toml`)* |
+| **Source → Root Directory** | *(empty — repo root, NOT `frontend/`)* |
+| **Build → Builder** | **Dockerfile** *(not Railpack / Nixpacks)* |
+| **Build → Dockerfile path** | `Dockerfile` |
+| Start Command | `python main.py` *(or leave empty — uses Dockerfile CMD)* |
 | Health Check Path | `/_health` |
+
+If you still see `pip: command not found`, Railway is using **Railpack/Nixpacks** instead of Docker. Fix the **Builder** setting above, add variable `NO_CACHE=1`, and redeploy.
+
+Optional variable: `RAILWAY_DOCKERFILE_PATH=Dockerfile`
 
 ### 3. Variables (Railway → Variables)
 

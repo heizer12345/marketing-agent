@@ -1,9 +1,0 @@
-# Fallback if Dockerfile is not used. Do NOT override [phases.install] with bare
-# "pip" — that runs before Python is on PATH (see Railway build error exit 127).
-providers = ["python"]
-
-[variables]
-NIXPACKS_PYTHON_VERSION = "3.12"
-
-[start]
-cmd = "python main.py"

@@ -5,20 +5,15 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
+# Install deps first (layer cache)
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN python -m pip install --upgrade pip && \
+    python -m pip install --no-cache-dir -r requirements.txt
 
-COPY main.py config.py Procfile runtime.txt ./
-COPY app ./app
-COPY skills ./skills
-COPY tools ./tools
-COPY knowledge ./knowledge
-COPY specs ./specs
-COPY config ./config
-COPY personas ./personas
-COPY design-systems ./design-systems
+# App code (frontend/ excluded via .dockerignore)
+COPY . .
 
-RUN mkdir -p data public/reports public/content public/reviews
+RUN mkdir -p data public/reports public/content public/reviews personas design-systems
 
 EXPOSE 8000
 

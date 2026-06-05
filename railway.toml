@@ -1,9 +1,9 @@
-# Railway — backend service (repo root, NOT frontend/)
-# Link this repo to your project (e.g. "compassionate fascination") on Railway.
+# Railway build — force Docker, not Railpack/Nixpacks
 
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
+watchPatterns = ["/Dockerfile", "/requirements.txt", "/main.py", "/app/**", "/skills/**", "/tools/**"]
 
 [deploy]
 startCommand = "python main.py"
