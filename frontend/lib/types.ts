@@ -91,5 +91,6 @@ export type MemoryState = {
   principles: Array<{ slug: string; name: string; summary?: string; [k: string]: any }>;
   winners: { ads: any[]; blogs: any[]; landing_pages: any[]; case_studies: any[] };
   api_status: Record<string, boolean>;
-  api_status_detail?: Record<string, { ok?: boolean; detail?: string; sessions_7d?: string }>;
+  api_status_detail?: Record<string, { ok?: boolean; detail?: string; sessions_7d?: string; events_7d?: string }>;
+  integrations_checked_at?: number;
 };

@@ -131,10 +131,100 @@ def _ga4_channel_drivers(metric: str = "sessions") -> list[dict]:
             chg = 100.0
         else:
             chg = 0.0
-        drivers.append({"label": ch, "current": round(cur_v, 1), "previous": round(prev_v, 1), "change_pct": chg})
+        drivers.append({
+            "label": ch,
+            "current": round(cur_v, 1),
+            "previous": round(prev_v, 1),
+            "change_pct": chg,
+            "delta": round(cur_v - prev_v, 1),
+        })
 
-    drivers.sort(key=lambda x: abs(x["change_pct"]), reverse=True)
+    drivers.sort(key=lambda x: abs(x.get("delta", x["current"] - x["previous"])), reverse=True)
     return drivers[:5]
+
+
+def _format_page_label(page: str) -> str:
+    if page.startswith("https://www.sourcy.ai"):
+        return page.replace("https://www.sourcy.ai", "www.sourcy.ai")
+    if page.startswith("https://sourcy.ai"):
+        return page.replace("https://sourcy.ai", "www.sourcy.ai")
+    return page
+
+
+def fetch_kpi_day_breakdown(kpi_key: str, date: str) -> dict[str, Any]:
+    """Top pages (GSC) or channels (GA4) for a single day — YYYY-MM-DD."""
+    if not date or len(date) < 10:
+        return {"date": date, "items": [], "error": "invalid_date"}
+
+    if kpi_key.startswith("gsc_"):
+        metric = "clicks" if "click" in kpi_key else "impressions"
+        from tools.search_console import _query_search_analytics
+
+        rows = _query_search_analytics(["page"], f"{date}:{date}", row_limit=12)
+        if rows and isinstance(rows[0], dict) and rows[0].get("error"):
+            return {"date": date, "items": [], "error": rows[0]["error"]}
+
+        total = sum(float(r.get(metric, 0) or 0) for r in rows or [])
+        items = []
+        for r in rows or []:
+            val = float(r.get(metric, 0) or 0)
+            if val <= 0:
+                continue
+            items.append({
+                "label": _format_page_label(r.get("page", "?")),
+                "value": round(val, 1),
+                "share_pct": round(val / total * 100, 1) if total else None,
+            })
+        items.sort(key=lambda x: x["value"], reverse=True)
+        return {
+            "date": date,
+            "kind": "page",
+            "metric": metric,
+            "total": round(total, 1),
+            "items": items[:8],
+        }
+
+    if kpi_key.startswith("ga4_"):
+        from tools.google_analytics import _run_report
+
+        metric_map = {
+            "ga4_sessions": "sessions",
+            "ga4_engaged_sessions": "engagedSessions",
+            "ga4_users": "totalUsers",
+            "ga4_engagement_rate": "engagementRate",
+        }
+        metric = metric_map.get(kpi_key, "sessions")
+        rows = _run_report(
+            ["sessionDefaultChannelGroup"],
+            [metric],
+            f"{date}:{date}",
+            order_by_metric=metric,
+            limit=10,
+        )
+        if rows and isinstance(rows[0], dict) and rows[0].get("error"):
+            return {"date": date, "items": [], "error": rows[0]["error"]}
+
+        total = sum(float(r.get(metric, 0) or 0) for r in rows or [])
+        items = []
+        for r in rows or []:
+            val = float(r.get(metric, 0) or 0)
+            if val <= 0:
+                continue
+            items.append({
+                "label": r.get("sessionDefaultChannelGroup", "Unknown"),
+                "value": round(val, 2 if metric == "engagementRate" else 1),
+                "share_pct": round(val / total * 100, 1) if total and metric != "engagementRate" else None,
+            })
+        items.sort(key=lambda x: x["value"], reverse=True)
+        return {
+            "date": date,
+            "kind": "channel",
+            "metric": metric,
+            "total": round(total, 2 if metric == "engagementRate" else 1),
+            "items": items[:8],
+        }
+
+    return {"date": date, "items": [], "error": "unsupported_metric"}
 
 
 def _gsc_daily(metric: str = "clicks", days: int = 14) -> dict[str, Any]:
@@ -160,7 +250,63 @@ def _gsc_daily(metric: str = "clicks", days: int = 14) -> dict[str, Any]:
         for d in sorted(by_date.keys())
     ]
     total, delta = _series_delta(series)
-    return {"series": series, "total_current": total, "delta_pct": delta, "drivers": [], "unit": ""}
+    drivers = _gsc_page_drivers(metric)
+    return {"series": series, "total_current": total, "delta_pct": delta, "drivers": drivers, "unit": ""}
+
+
+def _gsc_page_drivers(metric: str = "clicks") -> list[dict]:
+    """Top Search Console pages driving WoW change."""
+    from tools.search_console import _query_search_analytics
+
+    end = datetime.now() - timedelta(days=3)
+    cur_start = end - timedelta(days=6)
+    prev_end = cur_start - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=6)
+    cur = _query_search_analytics(
+        ["page"],
+        f"{cur_start.strftime('%Y-%m-%d')}:{end.strftime('%Y-%m-%d')}",
+        row_limit=15,
+    )
+    prev = _query_search_analytics(
+        ["page"],
+        f"{prev_start.strftime('%Y-%m-%d')}:{prev_end.strftime('%Y-%m-%d')}",
+        row_limit=15,
+    )
+    if cur and isinstance(cur[0], dict) and cur[0].get("error"):
+        return []
+
+    prev_map: dict[str, float] = {}
+    for r in prev or []:
+        page = r.get("page", "Unknown")
+        try:
+            prev_map[page] = float(r.get(metric, 0))
+        except (TypeError, ValueError):
+            prev_map[page] = 0.0
+
+    drivers: list[dict] = []
+    for r in cur or []:
+        page = r.get("page", "Unknown")
+        try:
+            cur_v = float(r.get(metric, 0))
+        except (TypeError, ValueError):
+            cur_v = 0.0
+        prev_v = prev_map.get(page, 0)
+        if prev_v > 0:
+            chg = round((cur_v - prev_v) / prev_v * 100, 1)
+        elif cur_v > 0:
+            chg = 100.0
+        else:
+            chg = 0.0
+        drivers.append({
+            "label": _format_page_label(page),
+            "current": round(cur_v, 1),
+            "previous": round(prev_v, 1),
+            "change_pct": chg,
+            "delta": round(cur_v - prev_v, 1),
+        })
+
+    drivers.sort(key=lambda x: abs(x.get("delta", x["current"] - x["previous"])), reverse=True)
+    return drivers[:5]
 
 
 def _google_ads_daily_spend(days: int = 14) -> dict[str, Any]:
@@ -271,16 +417,17 @@ def build_explanation_bullets(
             f"**Trend window:** Daily values for the last 7–14 days ({kpi_key.replace('_', ' ')})."
         )
 
+    driver_label = "page" if kpi_key.startswith("gsc_") else "channel"
     if drivers:
         top = drivers[0]
         sign = "up" if top["change_pct"] > 0 else "down" if top["change_pct"] < 0 else "flat"
         bullets.append(
-            f"**Top channel:** {top['label']} is {sign} **{abs(top['change_pct']):.1f}%** WoW "
+            f"**Top {driver_label}:** {top['label']} is {sign} **{abs(top['change_pct']):.1f}%** WoW "
             f"({top['previous']} → {top['current']})."
         )
         for d in drivers[1:3]:
             bullets.append(
-                f"**Also:** {d['label']} {d['change_pct']:+.1f}% WoW ({d['previous']} → {d['current']})."
+                f"**Also ({driver_label}):** {d['label']} {d['change_pct']:+.1f}% WoW ({d['previous']} → {d['current']})."
             )
 
     used = " ".join(bullets).lower()
@@ -358,10 +505,15 @@ def fetch_kpi_trend(kpi_key: str, label: str, source: str, insights: list[dict] 
         error=err,
     )
 
+    scope = _kpi_scope(kpi_key, label, source)
+    drivers_label = _drivers_label(kpi_key)
+
     return {
         "kpi_key": kpi_key,
         "label": label,
         "source": source,
+        "scope": scope,
+        "drivers_label": drivers_label,
         "series": series,
         "delta_pct": delta,
         "total_current": data.get("total_current"),
@@ -372,3 +524,28 @@ def fetch_kpi_trend(kpi_key: str, label: str, source: str, insights: list[dict] 
         "related_insights": related,
         "error": err,
     }
+
+
+def _drivers_label(kpi_key: str) -> str:
+    if kpi_key.startswith("gsc_"):
+        return "Top pages · last 7d vs prior 7d"
+    if kpi_key.startswith("ga4_"):
+        return "Top channels · last 7d vs prior 7d"
+    return "Top drivers · last 7d vs prior 7d"
+
+
+def _kpi_scope(kpi_key: str, label: str, source: str) -> str:
+    """Human-readable scope so KPI cards are not ambiguous."""
+    import config
+
+    if kpi_key.startswith("ga4_"):
+        return f"Site-wide · GA4 property {config.GA4_PROPERTY_ID or '?'} · default channel group for drivers"
+    if kpi_key.startswith("gsc_"):
+        return f"All pages · Search Console {config.SEARCH_CONSOLE_SITE_URL or '?'} · top pages for drivers"
+    if kpi_key == "google_ads_spend":
+        return f"All campaigns · Google Ads account {config.GOOGLE_ADS_CUSTOMER_ID or '?'}"
+    if kpi_key == "meta_spend":
+        return f"All campaigns · Meta act_{config.META_AD_ACCOUNT_ID or '?'}"
+    if kpi_key == "sourcy_leads":
+        return "Completed leads · Sourcy DB · unified_activation_conversations"
+    return f"{label} · {source}"

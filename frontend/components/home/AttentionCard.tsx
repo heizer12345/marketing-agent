@@ -28,9 +28,8 @@ type Props = {
 
 export function AttentionCard({ item, onClick }: Props) {
   const severity = item.severity || item.priority || "info";
-  const pageCount =
-    item.detail?.pages?.filter(Boolean).length ??
-    (item.text?.match(/\/[a-zA-Z][\w\-./]*/g)?.length ?? 0);
+  const pageCount = item.detail?.pages?.filter(Boolean).length ?? 0;
+  const refCount = item.detail?.references?.filter(Boolean).length ?? 0;
 
   return (
     <button
@@ -49,8 +48,11 @@ export function AttentionCard({ item, onClick }: Props) {
         <div className="text-[10.5px] text-muted mt-1.5 flex items-center flex-wrap gap-2">
           <span className={clsx("chip text-[10px]", SEVERITY_CHIP[severity] || "chip")}>{severity}</span>
           <span>Source: {item.source}</span>
+          {refCount > 0 && (
+            <span className="text-muted-soft">{refCount} reference{refCount === 1 ? "" : "s"}</span>
+          )}
           {pageCount > 0 && (
-            <span className="text-muted-soft">{pageCount} page{pageCount === 1 ? "" : "s"} cited</span>
+            <span className="text-muted-soft">{pageCount} page{pageCount === 1 ? "" : "s"}</span>
           )}
         </div>
         <div className="text-[11px] font-medium mt-2 text-cyan-700 group-hover:underline">

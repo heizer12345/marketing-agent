@@ -175,7 +175,7 @@ app.add_middleware(
     SessionMiddleware,
     secret_key=os.environ.get("SESSION_SECRET", "dev-secret-change-in-prod"),
     session_cookie="sourcy_session",
-    https_only=False,   # Railway terminates TLS at the edge; internal traffic is HTTP
+    https_only=False,   # TLS often terminates at the reverse proxy; internal traffic is HTTP
     same_site="lax",
 )
 app.include_router(login_router)

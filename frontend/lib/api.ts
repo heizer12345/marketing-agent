@@ -12,6 +12,7 @@ function v2(path: string): string {
 export type BriefingDetail = {
   cause: string;
   evidence: string;
+  references?: string[];
   pages: string[];
   suggestion: string;
   next_step: string;
@@ -26,11 +27,28 @@ export type BriefingItem = {
 };
 
 export type KpiTrendPoint = { date: string; raw_date?: string; value: number };
-export type KpiTrendDriver = { label: string; current: number; previous: number; change_pct: number };
+export type KpiTrendDriver = {
+  label: string;
+  current: number;
+  previous: number;
+  change_pct: number;
+  delta?: number;
+};
+export type KpiDayBreakdownItem = { label: string; value: number; share_pct?: number | null };
+export type KpiDayBreakdown = {
+  date: string;
+  kind?: string;
+  metric?: string;
+  total?: number;
+  items: KpiDayBreakdownItem[];
+  error?: string;
+};
 export type KpiTrendResponse = {
   kpi_key: string;
   label: string;
   source: string;
+  scope?: string;
+  drivers_label?: string;
   series: KpiTrendPoint[];
   delta_pct?: number | null;
   total_current?: number | null;
@@ -49,8 +67,23 @@ async function jsonFetch<T = any>(url: string, init?: RequestInit): Promise<T> {
     ...init,
   });
   if (!r.ok) {
-    const restartHint = r.status === 404 ? " Restart the backend: python main.py" : "";
-    throw new Error(`${r.status} ${r.statusText}.${restartHint}`);
+    let detail = "";
+    try {
+      const body = await r.json();
+      detail = body?.error || body?.detail || body?.hint || "";
+    } catch {
+      try {
+        detail = (await r.text()).slice(0, 200);
+      } catch {
+        /* ignore */
+      }
+    }
+    const restartHint =
+      r.status === 404 || r.status === 502 || r.status === 503
+        ? " Start the backend with python main.py (port 8000), then refresh."
+        : "";
+    const msg = detail || r.statusText || "Request failed";
+    throw new Error(`${msg} (${r.status})${restartHint}`);
   }
   return r.json();
 }
@@ -77,7 +110,7 @@ export const api = {
         status?: string;
         generated_at?: number;
         elapsed_seconds?: number;
-        kpis: Array<{ label: string; value: string | number; delta_pct?: number; source: string }>;
+        kpis: Array<{ label: string; value: string | number; delta_pct?: number; source: string; context?: string }>;
         insights: Array<{ text: string; severity: "urgent" | "important" | "info"; source: string; detail?: BriefingDetail }>;
         top_movers: Array<{ text: string; kind?: string; source: string }>;
         alerts: Array<BriefingItem & { severity: "urgent" | "important" | "info" }>;
@@ -91,6 +124,10 @@ export const api = {
   kpiTrend: (label: string, source: string) =>
     jsonFetch<KpiTrendResponse>(
       v2(`/home/kpi-trend?${new URLSearchParams({ label, source })}`),
+    ),
+  kpiTrendDay: (label: string, source: string, date: string) =>
+    jsonFetch<KpiDayBreakdown>(
+      v2(`/home/kpi-trend/day?${new URLSearchParams({ label, source, date })}`),
     ),
   library: (type: string) =>
     jsonFetch<{

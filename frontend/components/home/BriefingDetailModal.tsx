@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import clsx from "clsx";
 import type { BriefingItem } from "@/lib/api";
+import { textToBullets } from "@/lib/bulletText";
 import { displayPublicPageUrl, resolveBriefingDetail } from "@/lib/briefingDetail";
 
 export type { BriefingItem } from "@/lib/api";
@@ -35,12 +36,26 @@ function formatPage(page: string): { label: string; href: string | null } {
   return { label: p, href: null };
 }
 
+function BulletList({ items }: { items: string[] }) {
+  if (!items.length) return null;
+  return (
+    <ul className="mt-1.5 space-y-1.5 list-disc pl-4">
+      {items.map((line, i) => (
+        <li key={i} className="text-[13px] text-ink leading-relaxed">
+          {line}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function BriefingDetailModal({ item, onClose }: Props) {
   if (!item) return null;
 
   const d = resolveBriefingDetail(item);
   const severity = item.severity || item.priority || "info";
   const pages = (d.pages ?? []).filter(Boolean);
+  const references = (d.references ?? []).filter(Boolean);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
@@ -77,10 +92,23 @@ export function BriefingDetailModal({ item, onClose }: Props) {
         </div>
 
         <div className="overflow-y-auto thin-scroll px-5 py-4 space-y-4 flex-1">
-          <DetailSection title="What's the cause?" body={d.cause} />
-          <DetailSection title="Evidence & specific pages" body={d.evidence}>
-            {pages.length > 0 && (
-              <ul className="mt-2 space-y-1">
+          <DetailSection title="What's the cause?">
+            <BulletList items={textToBullets(d.cause)} />
+          </DetailSection>
+
+          <DetailSection title="Evidence">
+            <BulletList items={textToBullets(d.evidence)} />
+          </DetailSection>
+
+          {references.length > 0 && (
+            <DetailSection title="Specific references (campaigns, channels, posts)">
+              <BulletList items={references} />
+            </DetailSection>
+          )}
+
+          {pages.length > 0 && (
+            <DetailSection title="Pages cited">
+              <ul className="mt-1.5 space-y-1 list-disc pl-4">
                 {pages.map((page, i) => {
                   const { label, href } = formatPage(page);
                   return (
@@ -101,10 +129,16 @@ export function BriefingDetailModal({ item, onClose }: Props) {
                   );
                 })}
               </ul>
-            )}
+            </DetailSection>
+          )}
+
+          <DetailSection title="Suggestion">
+            <BulletList items={textToBullets(d.suggestion)} />
           </DetailSection>
-          <DetailSection title="Suggestion" body={d.suggestion} />
-          <DetailSection title="Next step" body={d.next_step} highlight />
+
+          <DetailSection title="Next step" highlight>
+            <BulletList items={textToBullets(d.next_step)} />
+          </DetailSection>
         </div>
 
         <div className="px-5 py-3 border-t shrink-0 flex justify-end gap-2" style={{ borderColor: "var(--border)" }}>
@@ -119,27 +153,19 @@ export function BriefingDetailModal({ item, onClose }: Props) {
 
 function DetailSection({
   title,
-  body,
   children,
   highlight,
 }: {
   title: string;
-  body: string;
   children?: ReactNode;
   highlight?: boolean;
 }) {
   return (
     <section
-      className={clsx(
-        "rounded-lg p-3.5",
-        highlight ? "border" : "bg-bg-alt"
-      )}
+      className={clsx("rounded-lg p-3.5", highlight ? "border" : "bg-bg-alt")}
       style={highlight ? { background: "#F0FDFA", borderColor: "rgba(6,182,212,0.35)" } : undefined}
     >
       <h3 className="text-[11px] uppercase tracking-wider font-semibold text-muted mb-1.5">{title}</h3>
-      {body && (
-        <p className="text-[13px] text-ink leading-relaxed whitespace-pre-wrap">{body}</p>
-      )}
       {children}
     </section>
   );

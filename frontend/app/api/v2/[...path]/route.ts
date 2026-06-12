@@ -1,6 +1,9 @@
 import type { NextRequest } from "next/server";
 import { proxyToBackend } from "@/lib/backendProxy";
 
+export const dynamic = "force-dynamic";
+export const maxDuration = 120;
+
 type Ctx = { params: { path: string[] } };
 
 async function handle(req: NextRequest, ctx: Ctx) {

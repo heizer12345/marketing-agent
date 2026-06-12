@@ -11,9 +11,7 @@ load_dotenv()
 AUTH_USERNAME = os.getenv("AUTH_USERNAME", "admin")
 AUTH_PASSWORD = os.getenv("AUTH_PASSWORD", "admin123")
 DEV_MODE = os.getenv("DEV_MODE", "0") == "1"
-# On Railway (RAILWAY_ENVIRONMENT is always set), default public API for Vercel prototype.
-_ON_RAILWAY = bool(os.getenv("RAILWAY_ENVIRONMENT"))
-V2_PUBLIC_ACCESS = os.getenv("V2_PUBLIC_ACCESS", "1" if _ON_RAILWAY else "0") == "1"
+V2_PUBLIC_ACCESS = os.getenv("V2_PUBLIC_ACCESS", "0") == "1"
 
 _PASS_THROUGH = {"/login", "/logout", "/_health"}
 

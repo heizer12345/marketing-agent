@@ -1,21 +1,22 @@
-import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
-import { getServerBackendOrigin } from "@/lib/backendProxy";
+import {
+  getServerBackendOrigin,
+  isBackendConfigured,
+  isHostedFrontend,
+} from "@/lib/backendProxy";
 
-/** Runtime health + wiring check (does not require Railway CORS). */
+/** Runtime health check — local dev defaults to localhost:8000 without env vars. */
 export async function GET() {
-  const backend = getServerBackendOrigin();
-  const configured = Boolean(
-    process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL,
-  );
-
-  if (!configured) {
+  if (!isBackendConfigured()) {
     return NextResponse.json({
       ok: false,
       configured: false,
-      hint: "Set NEXT_PUBLIC_BACKEND_URL to your Railway public URL on Render (or Vercel), then redeploy.",
+      hint: "Set NEXT_PUBLIC_BACKEND_URL to your API host.",
     });
   }
+
+  const backend = getServerBackendOrigin();
+  const mode = isHostedFrontend() ? "hosted" : "local";
 
   try {
     const r = await fetch(`${backend}/_health`, { cache: "no-store" });
@@ -23,16 +24,23 @@ export async function GET() {
     return NextResponse.json({
       ok: r.ok,
       configured: true,
+      mode,
       backend_host: new URL(backend).host,
       health_status: r.status,
       health_body: text.slice(0, 200),
     });
   } catch (e) {
+    const hint =
+      mode === "local"
+        ? "Start the backend: python main.py (port 8000)."
+        : "Check NEXT_PUBLIC_BACKEND_URL and that the API is running.";
     return NextResponse.json({
       ok: false,
       configured: true,
+      mode,
       backend_host: new URL(backend).host,
       error: e instanceof Error ? e.message : String(e),
+      hint,
     });
   }
 }

@@ -53,9 +53,7 @@ function SourcyAssetLink({ href, children }: { href: string; children?: ReactNod
 
 const mdLink = {
   a: ({ href, children }: { href?: string; children?: ReactNode }) => {
-    if (href && isSourcyContentAsset(href)) {
-      return <SourcyAssetLink href={href}>{children}</SourcyAssetLink>;
-    }
+    // Markdown calendars/blogs → in-app preview (must run before isSourcyContentAsset).
     if (isContentPreviewPath(href)) {
       const label =
         typeof children === "string" && children.includes("/content/")
@@ -74,6 +72,9 @@ const mdLink = {
           </svg>
         </Link>
       );
+    }
+    if (href && isSourcyContentAsset(href)) {
+      return <SourcyAssetLink href={href}>{children}</SourcyAssetLink>;
     }
     if (href && !shouldAutoLinkExternalUrl(href)) {
       return (

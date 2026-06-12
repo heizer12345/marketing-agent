@@ -31,6 +31,8 @@ export function publicAssetLabel(pathOrUrl: string): string {
 
 export function isSourcyContentAsset(href: string | undefined): boolean {
   if (!href) return false;
+  // Saved markdown (calendars, blogs, …) opens in /preview/content — not the public site.
+  if (/\.md$/i.test(href)) return false;
   if (/^https?:\/\/(www\.)?sourcy\.ai\/content\//i.test(href)) return true;
   return /^\/content\/(images|calendars|blogs|audits|briefs|landing-pages|ads|case-studies)\//i.test(
     href,
@@ -40,6 +42,14 @@ export function isSourcyContentAsset(href: string | undefined): boolean {
 /** `/content/calendars/foo.md` → in-app preview route */
 export function normalizeContentPath(path: string): string {
   let p = path.trim().replace(/^`+|`+$/g, "");
+  if (p.startsWith("http://") || p.startsWith("https://")) {
+    try {
+      const u = new URL(p);
+      if (u.pathname.includes("/content/")) p = u.pathname;
+    } catch {
+      /* keep */
+    }
+  }
   if (p.startsWith("public/content/")) {
     p = "/" + p.slice("public/".length);
   }
@@ -174,7 +184,8 @@ function isInsideMarkdownLink(text: string, index: number): boolean {
 
 export function isContentPreviewPath(href: string | undefined): boolean {
   if (!href) return false;
-  return /^\/content\/.*\.md$/i.test(normalizeContentPath(href));
+  const p = normalizeContentPath(href);
+  return /^\/content\/.*\.md$/i.test(p);
 }
 
 export function isReportPath(href: string | undefined): boolean {

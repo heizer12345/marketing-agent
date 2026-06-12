@@ -2,7 +2,13 @@
 
 import { useEffect, useId, useMemo, useState } from "react";
 import clsx from "clsx";
-import { api, type KpiTrendResponse, type KpiTrendPoint } from "@/lib/api";
+import {
+  api,
+  type KpiDayBreakdown,
+  type KpiTrendDriver,
+  type KpiTrendResponse,
+  type KpiTrendPoint,
+} from "@/lib/api";
 
 type ChartPoint = KpiTrendPoint & { x: number; y: number };
 
@@ -23,6 +29,16 @@ function formatMetricValue(value: number, unit?: string): string {
   return `${n} ${unit}`;
 }
 
+function formatDriverComparison(d: KpiTrendDriver, unit?: string): string {
+  return `${formatMetricValue(d.previous, unit)} → ${formatMetricValue(d.current, unit)}`;
+}
+
+function formatDriverChangeLabel(d: KpiTrendDriver): string {
+  if (d.previous === 0 && d.current > 0) return "new";
+  const sign = d.change_pct > 0 ? "+" : "";
+  return `${sign}${d.change_pct.toFixed(1)}%`;
+}
+
 function dayOverDay(points: ChartPoint[], index: number): { delta: number; pct: number | null } | null {
   if (index <= 0) return null;
   const prev = points[index - 1].value;
@@ -37,6 +53,7 @@ export type KpiCard = {
   value: string | number;
   delta_pct?: number;
   source: string;
+  context?: string;
 };
 
 type Props = {
@@ -48,6 +65,10 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
   const [trend, setTrend] = useState<KpiTrendResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedLabel, setSelectedLabel] = useState<string | null>(null);
+  const [dayBreakdown, setDayBreakdown] = useState<KpiDayBreakdown | null>(null);
+  const [dayLoading, setDayLoading] = useState(false);
 
   useEffect(() => {
     if (!kpi) return;
@@ -62,6 +83,9 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
     if (!kpi) {
       setTrend(null);
       setErr(null);
+      setSelectedDate(null);
+      setSelectedLabel(null);
+      setDayBreakdown(null);
       return;
     }
     let cancelled = false;
@@ -82,6 +106,33 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
       cancelled = true;
     };
   }, [kpi]);
+
+  useEffect(() => {
+    if (!kpi || !selectedDate || !trend?.kpi_key) {
+      setDayBreakdown(null);
+      return;
+    }
+    if (!trend.kpi_key.startsWith("gsc_") && !trend.kpi_key.startsWith("ga4_")) {
+      setDayBreakdown(null);
+      return;
+    }
+    let cancelled = false;
+    setDayLoading(true);
+    api
+      .kpiTrendDay(kpi.label, kpi.source, selectedDate)
+      .then((r) => {
+        if (!cancelled) setDayBreakdown(r);
+      })
+      .catch(() => {
+        if (!cancelled) setDayBreakdown({ date: selectedDate, items: [], error: "load_failed" });
+      })
+      .finally(() => {
+        if (!cancelled) setDayLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [kpi, selectedDate, trend?.kpi_key]);
 
   if (!kpi) return null;
 
@@ -125,6 +176,11 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
               )}
               <span className="text-[10px] text-muted-soft">{kpi.source}</span>
             </div>
+            {(trend?.scope || kpi.context) && (
+              <p className="text-[11px] text-muted mt-2 leading-snug">
+                {trend?.scope || kpi.context}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -150,6 +206,27 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
               label={kpi.label}
               series={trend!.series}
               unit={unit}
+              selectedIndex={
+                selectedDate
+                  ? trend!.series.findIndex((p) => p.raw_date === selectedDate)
+                  : null
+              }
+              onSelectPoint={(point) => {
+                if (point.raw_date) {
+                  setSelectedDate(point.raw_date);
+                  setSelectedLabel(point.date);
+                }
+              }}
+            />
+          )}
+
+          {selectedDate && trend?.kpi_key && (trend.kpi_key.startsWith("gsc_") || trend.kpi_key.startsWith("ga4_")) && (
+            <DayBreakdownSection
+              dateLabel={selectedLabel || selectedDate}
+              breakdown={dayBreakdown}
+              loading={dayLoading}
+              kind={trend.kpi_key.startsWith("gsc_") ? "page" : "channel"}
+              unit={unit}
             />
           )}
           {!loading && (trend?.series?.length ?? 0) === 0 && !err && (
@@ -159,25 +236,27 @@ export function KpiTrendModal({ kpi, onClose }: Props) {
           {trend?.drivers && trend.drivers.length > 0 && (
             <section>
               <h3 className="text-[11px] uppercase tracking-wider font-semibold text-muted mb-2">
-                Top drivers (channels)
+                {trend.drivers_label || "Top drivers · last 7d vs prior 7d"}
               </h3>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {trend.drivers.map((d, i) => (
                   <li
                     key={i}
-                    className="flex items-center justify-between text-[12.5px] rounded-md px-2.5 py-1.5 bg-white border"
+                    className="rounded-md px-2.5 py-2 bg-white border text-[12.5px]"
                     style={{ borderColor: "var(--border)" }}
                   >
-                    <span className="font-medium text-ink truncate pr-2">{d.label}</span>
-                    <span
-                      className={clsx(
-                        "shrink-0 font-semibold tabular-nums",
-                        d.change_pct > 0 ? "text-emerald-600" : d.change_pct < 0 ? "text-rose-600" : "text-muted",
-                      )}
-                    >
-                      {d.change_pct > 0 ? "+" : ""}
-                      {d.change_pct.toFixed(1)}%
-                    </span>
+                    <div className="font-medium text-ink truncate">{d.label}</div>
+                    <div className="flex items-center justify-between gap-2 mt-1">
+                      <span className="text-muted tabular-nums">{formatDriverComparison(d, unit)}</span>
+                      <span
+                        className={clsx(
+                          "shrink-0 font-semibold tabular-nums",
+                          d.change_pct > 0 ? "text-emerald-600" : d.change_pct < 0 ? "text-rose-600" : "text-muted",
+                        )}
+                      >
+                        {formatDriverChangeLabel(d)}
+                      </span>
+                    </div>
                   </li>
                 ))}
               </ul>
@@ -239,14 +318,71 @@ function ExplanationBullet({ text }: { text: string }) {
   );
 }
 
+function DayBreakdownSection({
+  dateLabel,
+  breakdown,
+  loading,
+  kind,
+  unit,
+}: {
+  dateLabel: string;
+  breakdown: KpiDayBreakdown | null;
+  loading: boolean;
+  kind: "page" | "channel";
+  unit?: string;
+}) {
+  const title = kind === "page" ? `Pages on ${dateLabel}` : `Channels on ${dateLabel}`;
+  return (
+    <section className="rounded-lg border p-3 bg-white" style={{ borderColor: "var(--border)" }}>
+      <h3 className="text-[11px] uppercase tracking-wider font-semibold text-muted mb-2">{title}</h3>
+      {loading && <p className="text-[12px] text-muted">Loading breakdown…</p>}
+      {!loading && breakdown?.error && (
+        <p className="text-[12px] text-muted">No breakdown available for this day.</p>
+      )}
+      {!loading && breakdown && !breakdown.error && breakdown.items.length === 0 && (
+        <p className="text-[12px] text-muted">No data for this date.</p>
+      )}
+      {!loading && breakdown && breakdown.items.length > 0 && (
+        <>
+          {typeof breakdown.total === "number" && (
+            <p className="text-[12px] text-muted mb-2">
+              Total: <strong className="text-ink">{formatMetricValue(breakdown.total, unit)}</strong>
+            </p>
+          )}
+          <ul className="space-y-1.5 list-none m-0 p-0">
+            {breakdown.items.map((item, i) => (
+              <li key={i} className="flex items-start justify-between gap-2 text-[12.5px]">
+                <span className="flex gap-2 min-w-0">
+                  <span className="text-cyan-700 shrink-0">•</span>
+                  <span className="text-ink truncate">{item.label}</span>
+                </span>
+                <span className="shrink-0 tabular-nums text-muted">
+                  {formatMetricValue(item.value, unit)}
+                  {item.share_pct != null && (
+                    <span className="text-muted-soft"> ({item.share_pct}%)</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+  );
+}
+
 function KpiTrendChart({
   label,
   series,
   unit,
+  selectedIndex,
+  onSelectPoint,
 }: {
   label: string;
   series: KpiTrendPoint[];
   unit?: string;
+  selectedIndex?: number | null;
+  onSelectPoint?: (point: KpiTrendPoint) => void;
 }) {
   const gradientId = useId().replace(/:/g, "");
   const [hovered, setHovered] = useState<number | null>(null);
@@ -295,7 +431,9 @@ function KpiTrendChart({
       style={{ borderColor: "var(--border)" }}
       onMouseLeave={() => setHovered(null)}
     >
-      <p className="text-[10px] text-muted mb-2">Hover a point for daily value and day-over-day change</p>
+      <p className="text-[10px] text-muted mb-2">
+        Hover for daily value · click a point to see pages/channels for that day
+      </p>
       <div className="relative">
         {active && (
           <div
@@ -362,11 +500,13 @@ function KpiTrendChart({
           )}
           {points.map((p, i) => {
             const isActive = hovered === i;
+            const isSelected = selectedIndex === i;
             return (
               <g
                 key={i}
                 onMouseEnter={() => setHovered(i)}
                 onFocus={() => setHovered(i)}
+                onClick={() => onSelectPoint?.(p)}
                 style={{ cursor: "pointer" }}
                 tabIndex={0}
                 role="button"
@@ -376,10 +516,10 @@ function KpiTrendChart({
                 <circle
                   cx={p.x}
                   cy={p.y}
-                  r={isActive ? 6 : 3.5}
-                  fill={isActive ? "#0E7490" : "#0891B2"}
-                  stroke={isActive ? "#fff" : "none"}
-                  strokeWidth={isActive ? 2 : 0}
+                  r={isActive || isSelected ? 6 : 3.5}
+                  fill={isSelected ? "#0E7490" : isActive ? "#0891B2" : "#0891B2"}
+                  stroke={isSelected ? "#F59E0B" : isActive ? "#fff" : "none"}
+                  strokeWidth={isSelected ? 2.5 : isActive ? 2 : 0}
                   className="transition-all duration-150"
                 />
                 {(isActive || i === 0 || i === points.length - 1) && (

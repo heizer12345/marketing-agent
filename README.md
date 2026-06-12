@@ -236,11 +236,3 @@ npm run dev
 
 Backend: `http://localhost:8000`
 Frontend: `http://localhost:3000`
-
-### Deploy prototype (Railway API + Render frontend)
-
-Backend (Railway): deploy **repo root** (`python main.py`) — see `Dockerfile`, `railway.toml`.
-
-Frontend (Render, recommended): **Blueprint** from `render.yaml` — see [docs/DEPLOY_RENDER.md](docs/DEPLOY_RENDER.md).
-
-Alternative frontend (Vercel): [docs/DEPLOY_RAILWAY_VERCEL.md](docs/DEPLOY_RAILWAY_VERCEL.md)

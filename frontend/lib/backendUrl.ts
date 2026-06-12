@@ -1,5 +1,5 @@
 /**
- * URL helpers for local dev vs hosted frontend (Render/Vercel) + Railway API.
+ * URL helpers for local dev vs hosted frontend + separate Python API.
  *
  * REST (browser): same-origin paths (/api/v2/...) proxied to NEXT_PUBLIC_BACKEND_URL.
  *
@@ -11,14 +11,17 @@ export function getBackendOrigin(): string {
   return env || "";
 }
 
-/** HTTP API path — browser uses relative URLs; server components use full backend URL. */
+/** HTTP API path — browser uses relative URLs; server components hit the backend directly. */
 export function apiUrl(path: string): string {
   const p = path.startsWith("/") ? path : `/${path}`;
   if (typeof window !== "undefined") {
     return p;
   }
-  const origin = getBackendOrigin();
-  return origin ? `${origin}${p}` : p;
+  const origin =
+    getBackendOrigin() ||
+    process.env.BACKEND_URL?.replace(/\/$/, "") ||
+    "http://localhost:8000";
+  return `${origin}${p}`;
 }
 
 export function wsUrl(path: string): string {

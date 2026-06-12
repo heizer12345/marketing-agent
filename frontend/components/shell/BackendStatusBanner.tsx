@@ -35,7 +35,7 @@ export function BackendStatusBanner() {
         }
         if (!data.ok) {
           setStatus("unreachable");
-          setDetail(data.error || `health ${data.health_status}`);
+          setDetail(data.hint || data.error || `health ${data.health_status}`);
           return;
         }
         setStatus("ok");
@@ -54,18 +54,18 @@ export function BackendStatusBanner() {
 
   const copy: Record<Exclude<Status, "ok">, { title: string; body: string }> = {
     missing_backend: {
-      title: "Railway URL not set on the frontend host",
+      title: "Backend URL not configured",
       body:
-        "On Render (or Vercel) → Environment: set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your Railway domain (https://… and wss://…). Redeploy. Railway must have V2_PUBLIC_ACCESS=1.",
+        "Run python main.py in the project root (port 8000), or set NEXT_PUBLIC_BACKEND_URL and NEXT_PUBLIC_BACKEND_WS_URL to your API host.",
     },
     unreachable: {
-      title: "Frontend cannot reach Railway",
+      title: "Cannot reach the backend",
       body:
-        "Open your Railway /_health and /api/v2/memory/state in the browser. Confirm NEXT_PUBLIC_BACKEND_URL matches exactly (no trailing slash), then redeploy the frontend.",
+        "Confirm the API is running and opens /_health in your browser. For local dev, start the backend with python main.py.",
     },
     unauthorized: {
-      title: "Railway API blocked by login",
-      body: "On Railway set V2_PUBLIC_ACCESS=1 and restart the service.",
+      title: "API blocked by login",
+      body: "Set DEV_MODE=1 in .env for local dev, or log in via the backend /login page.",
     },
     vercel_sso: {
       title: "Vercel Deployment Protection is blocking this site",

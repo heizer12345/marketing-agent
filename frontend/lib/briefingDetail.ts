@@ -178,7 +178,7 @@ export function resolveBriefingDetail(item: BriefingItem): BriefingDetail {
 
       cause =
 
-        "Google Ads shows $0 spend despite an active budget — campaign may be paused, disapproved, or out of schedule.";
+        "Google Ads reported $0 spend (7d). Campaigns are likely paused or not running — confirm status in Ads Manager before treating as a delivery issue.";
 
     } else {
 
@@ -250,7 +250,9 @@ export function resolveBriefingDetail(item: BriefingItem): BriefingDetail {
 
 
 
-  return { cause, evidence, pages, suggestion, next_step };
+  const references = (d?.references ?? []).filter(Boolean);
+
+  return { cause, evidence, references, pages, suggestion, next_step };
 
 }
 

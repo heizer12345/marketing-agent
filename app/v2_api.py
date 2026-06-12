@@ -42,24 +42,14 @@ async def memory_state(persona: str = "sourcy", design: str = "sourcy"):
 
     setup_complete = bool(persona_data) and bool(design_data)
 
-    ga4_ping = config.ping_ga4()
-    gsc_ping = config.ping_search_console()
-
-    api_status = {
-        "openai": bool(config.OPENAI_API_KEY),
-        "ga4": ga4_ping["ok"],
-        "search_console": gsc_ping["ok"],
-        "google_ads": bool(getattr(config, "GOOGLE_ADS_REFRESH_TOKEN", "")),
-        "meta_ads": bool(getattr(config, "META_ACCESS_TOKEN", "")),
-        "semrush": bool(getattr(config, "SEMRUSH_API_KEY", "")),
-        "instagram": bool(getattr(config, "INSTAGRAM_BUSINESS_ACCOUNT_ID", "")),
-        "posthog": bool(getattr(config, "POSTHOG_API_KEY", "")),
-    }
-
-    api_status_detail = {
-        "ga4": ga4_ping,
-        "search_console": gsc_ping,
-    }
+    try:
+        pings = config.ping_all_integrations()
+    except Exception as ex:
+        pings = {
+            "openai": {"ok": False, "detail": str(ex)[:200]},
+        }
+    api_status = {key: bool(ping.get("ok")) for key, ping in pings.items()}
+    api_status_detail = pings
 
     return JSONResponse({
         "setup_complete": setup_complete,
@@ -69,6 +59,7 @@ async def memory_state(persona: str = "sourcy", design: str = "sourcy"):
         "winners": winners,
         "api_status": api_status,
         "api_status_detail": api_status_detail,
+        "integrations_checked_at": int(time.time()),
     })
 
 
@@ -195,52 +186,25 @@ async def _run_home_analysis_background() -> None:
         from agents import Runner
         from skills.marketing_data_analyst import marketing_data_analyst
 
+        from app.home_briefing_rules import HOME_SNAPSHOT_JSON_SHAPE, HOME_SNAPSHOT_OUTPUT_RULES
+
         prompt = (
             "Produce a COMPREHENSIVE Sourcy marketing dashboard snapshot for the last 7 days. "
             "Pull and cross-reference data from EVERY connected source:\n"
             "- GA4 (traffic, channels, geo, engagement)\n"
-            "- Search Console (rankings, CTR, branded vs non-branded)\n"
-            "- Google Ads (spend, CPL, top keywords, geo leakage)\n"
-            "- Meta Ads (impressions, CTR, creative fatigue, audience overlap)\n"
-            "- Instagram (posts, engagement, top content)\n"
+            "- Search Console (rankings, CTR, branded vs non-branded, top pages)\n"
+            "- Google Ads (spend, campaign status, CPL — note if campaigns are paused)\n"
+            "- Meta Ads (campaign/ad set/ad names, impressions, CTR)\n"
+            "- Instagram (posts, engagement, @handle)\n"
             "- PostHog (funnel drop-offs) if available\n"
             "- Sourcy DB (real leads, activations)\n\n"
-            "Output ONLY a JSON object between <<<JSON>>> and <<<END_JSON>>> with this exact shape:\n\n"
-            "{\n"
-            '  "kpis": [{"label": "Sessions (7d)", "value": "12,180", "delta_pct": -8.2, "source": "GA4"}, ...],\n'
-            '  "insights": [{"text": "Sessions dropped 12% in DE week-over-week", "severity": "important", "source": "GA4"}, ...],\n'
-            '  "top_movers": [{"text": "\\"private label sourcing\\" rank 8 → 4", "kind": "keyword_up", "source": "Search Console"}, ...],\n'
-            '  "alerts": [{\n'
-            '    "text": "Short headline (max 120 chars)",\n'
-            '    "severity": "urgent",\n'
-            '    "source": "GA4",\n'
-            '    "detail": {\n'
-            '      "cause": "Why this is happening — causal mechanism, not just the symptom",\n'
-            '      "evidence": "Specific metrics with numbers, date range, and comparison (WoW/benchmark)",\n'
-            '      "pages": ["https://www.sourcy.ai/onboard", "https://www.sourcy.ai/blogs/example-slug"],\n'
-            '      "suggestion": "What we recommend doing about it",\n'
-            '      "next_step": "One concrete action marketing can take today"\n'
-            '    }\n'
-            '  }, ...],\n'
-            '  "recommendations": [{\n'
-            '    "text": "Short action headline",\n'
-            '    "priority": "high",\n'
-            '    "source": "Google Ads",\n'
-            '    "detail": { "cause": "...", "evidence": "...", "pages": ["..."], "suggestion": "...", "next_step": "..." }\n'
-            '  }, ...]\n'
-            "}\n\n"
-            "Rules:\n"
+            "Output ONLY a JSON object between <<<JSON>>> and <<<END_JSON>>> with this shape:\n\n"
+            f"{HOME_SNAPSHOT_JSON_SHAPE}\n\n"
+            f"{HOME_SNAPSHOT_OUTPUT_RULES}\n\n"
+            "Additional rules:\n"
             "- Severity: 'urgent' / 'important' / 'info'.   Priority: 'high' / 'medium' / 'low'.\n"
             "- DEPTH targets: 6-8 KPIs, 10-15 insights, 5-8 top_movers, 3-6 alerts, 5-10 recommendations.\n"
-            "- Insights must span ALL channels — at least 1-2 from each of: GA4, Search Console, Google Ads, Meta Ads, Sourcy DB.\n"
-            "- Every entry needs a `source` field referencing the data source.\n"
-            "- Quote specific numbers, never vague claims.\n"
-            "- **MANDATORY for every `alerts[]` and `recommendations[]` item**: include a complete `detail` object with all 5 keys:\n"
-            "  cause, evidence, pages (array of full https://www.sourcy.ai/... URLs — at least 1 when GA4/GSC/page-level), suggestion, next_step.\n"
-            "- `pages` must use full sourcy.ai URLs (e.g. https://www.sourcy.ai/onboard, https://www.sourcy.ai/blogs/slug) — never bare paths like /onboard.\n"
-            "- In cause, suggestion, and next_step prose, reference pages as www.sourcy.ai/path (not /path).\n"
-            "- `text` is the card headline only; put depth in `detail`.\n"
-            "- If a data source is unavailable, omit entries for it — DO NOT make numbers up.\n"
+            "- Insights must span connected channels — at least 1 from each source that returned data.\n"
             "- Return ONLY the JSON object. No HTML artifact, no extra prose.\n"
             "- The <<<JSON>>>...<<<END_JSON>>> wrappers are mandatory."
         )
@@ -360,6 +324,15 @@ async def _refresh_with_lock() -> None:
         return
     async with _home_refresh_lock:
         await _run_home_analysis_background()
+
+
+@router.get("/home/kpi-trend/day")
+async def home_kpi_trend_day(label: str, source: str = "", date: str = ""):
+    """Per-day page/channel breakdown when user selects a point on the KPI chart."""
+    from app.kpi_trends import fetch_kpi_day_breakdown, resolve_kpi_key
+
+    kpi_key = resolve_kpi_key(label, source)
+    return fetch_kpi_day_breakdown(kpi_key, date.strip())
 
 
 @router.get("/home/kpi-trend")

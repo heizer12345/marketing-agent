@@ -106,10 +106,11 @@ def _build_cause(item: dict, text: str, source: str) -> str:
             "A large share of sessions comes from China with almost no engagement. "
             "This is often bot traffic, mis-targeted ads, or scrapers — not qualified B2B sourcing buyers."
         )
-    if "spent $0" in low or "spend $0" in low:
+    if "spent $0" in low or "spend $0" in low or ("google ads" in low and "$0" in low):
         return (
-            "Google Ads reporting shows zero spend in the last 7 days while a budget is configured. "
-            "Campaigns may be paused, disapproved, out of schedule, or blocked by billing/targeting."
+            "Google Ads reported $0 spend in the last 7 days. "
+            "This usually means campaigns are paused or not running — confirm status in Ads Manager "
+            "before treating it as a delivery failure."
         )
     if "frequency" in low and "320" in low:
         return (
@@ -180,8 +181,9 @@ def _build_suggestion(item: dict, text: str, source: str, pages: list[str]) -> s
         )
     if "spent $0" in low:
         return (
-            "Open Google Ads → Campaigns → check status, budget, ad approval, and location targeting "
-            "for the Philippines blog campaign (or whichever campaign should be live)."
+            "In Google Ads → Campaigns, confirm which campaigns are Paused vs Enabled. "
+            "If spend is intentionally off, no action needed; if a campaign should be live, "
+            "check status, budget, ad approval, and geo targeting for that named campaign."
         )
     if "negative keyword" in low:
         return text
@@ -214,8 +216,9 @@ def _build_next_step(item: dict, text: str, source: str, pages: list[str], defau
         )
     if "spent $0" in low and "google" in low:
         return (
-            "Today: In Google Ads, open the live campaign → check Status column, "
-            "Billing, and Ads & assets for disapprovals. Resume or clone if stuck paused."
+            "Today: In Google Ads, list campaign names + Status. "
+            "Only troubleshoot delivery if an Enabled campaign with budget spent $0; "
+            "otherwise document that ads are intentionally paused."
         )
     if "meta" in low and "frequency" in low:
         return (
@@ -248,6 +251,11 @@ def build_briefing_detail(
     else:
         pages = _normalize_pages(pages)
 
+    refs = raw_detail.get("references") or []
+    if isinstance(refs, str):
+        refs = [r.strip() for r in refs.split(",") if r.strip()]
+    refs = [str(r).strip() for r in refs if str(r).strip()]
+
     cause = (raw_detail.get("cause") or "").strip() or _build_cause(item, text, source)
     evidence = (raw_detail.get("evidence") or "").strip() or _build_evidence(item, text, source, kpis)
     suggestion = (raw_detail.get("suggestion") or "").strip() or _build_suggestion(item, text, source, pages)
@@ -260,6 +268,7 @@ def build_briefing_detail(
         "detail": {
             "cause": cause,
             "evidence": evidence,
+            "references": refs,
             "pages": pages,
             "suggestion": suggestion,
             "next_step": next_step,

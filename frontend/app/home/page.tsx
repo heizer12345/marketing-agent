@@ -7,6 +7,7 @@ import { assetUrl } from "@/lib/backendUrl";
 import { AttentionCard } from "@/components/home/AttentionCard";
 import { BriefingDetailModal } from "@/components/home/BriefingDetailModal";
 import { KpiTrendModal, type KpiCard } from "@/components/home/KpiTrendModal";
+import { RecommendationChannelTabs } from "@/components/home/RecommendationChannelTabs";
 
 type Snapshot = Awaited<ReturnType<typeof api.homeSnapshot>>["snapshot"];
 type Dashboard = Awaited<ReturnType<typeof api.homeSnapshot>>["dashboard"];
@@ -193,10 +194,9 @@ export default function HomePage() {
           <div className="text-sm font-semibold" style={{ color: "#B91C1C" }}>Could not load briefing data</div>
           <div className="text-[12px] mt-1" style={{ color: "#7F1D1D" }}>{apiError}</div>
           <p className="text-[12px] mt-2" style={{ color: "#7F1D1D" }}>
-            Deploy the Python backend on Railway, then set frontend env (Render or Vercel){" "}
-            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_URL</code> and{" "}
-            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_WS_URL</code> to that host and{" "}
-            <strong>redeploy</strong>. Backend: <code className="text-[11px]">V2_PUBLIC_ACCESS=1</code>.
+            Start the backend with <code className="text-[11px]">python main.py</code> (port 8000), then refresh.
+            For a remote API, set <code className="text-[11px]">NEXT_PUBLIC_BACKEND_URL</code> and{" "}
+            <code className="text-[11px]">NEXT_PUBLIC_BACKEND_WS_URL</code> in the frontend env.
           </p>
         </div>
       )}
@@ -273,6 +273,9 @@ export default function HomePage() {
                 >
                   <div className="text-[11px] text-muted">{k.label}</div>
                   <div className="text-xl font-bold text-ink mt-1" style={{ letterSpacing: "-0.02em" }}>{k.value}</div>
+                  {k.context && (
+                    <div className="text-[10px] text-muted-soft mt-1 leading-snug line-clamp-2">{k.context}</div>
+                  )}
                   <div className="flex items-center justify-between mt-1">
                     {typeof k.delta_pct === "number" ? (
                       <span className={clsx(
@@ -350,17 +353,7 @@ export default function HomePage() {
         )}
 
         {recommendations.length > 0 && (
-          <section>
-            <div className="section-heading">
-              <h2>🎯 Recommended next moves</h2>
-              <span className="hint">Click any item for cause, evidence & steps</span>
-            </div>
-            <div className="space-y-2">
-              {recommendations.map((r, i) => (
-                <AttentionCard key={i} item={r} onClick={() => setDetailItem(r)} />
-              ))}
-            </div>
-          </section>
+          <RecommendationChannelTabs items={recommendations} onSelect={setDetailItem} />
         )}
 
         {snap?.elapsed_seconds != null && (

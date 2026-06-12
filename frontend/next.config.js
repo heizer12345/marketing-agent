@@ -9,13 +9,12 @@ module.exports = {
   reactStrictMode: false,
   async rewrites() {
     const base = BACKEND.replace(/\/$/, "");
+    // API traffic uses app/api/** route handlers (backendProxy) — do NOT duplicate
+    // /api/* here; Next rewrites return opaque 500s ("socket hang up") when the
+    // backend is slow or restarting.
     return [
-      { source: "/_health", destination: `${base}/_health` },
-      { source: "/api/v2/:path*", destination: `${base}/api/v2/:path*` },
-      { source: "/api/:path*", destination: `${base}/api/:path*` },
       { source: "/ws", destination: `${base}/ws` },
       { source: "/ws/:path*", destination: `${base}/ws/:path*` },
-      { source: "/reports/:path*", destination: `${base}/reports/:path*` },
       { source: "/content/:path*", destination: `${base}/content/:path*` },
       { source: "/brand/:path*", destination: `${base}/brand/:path*` },
       { source: "/reviews/:path*", destination: `${base}/reviews/:path*` },

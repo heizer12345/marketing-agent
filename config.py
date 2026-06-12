@@ -33,7 +33,7 @@ _INLINE_GOOGLE_CREDENTIALS_PATH = CREDENTIALS_DIR / "service-account-key.inline.
 _INLINE_GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_APPLICATION_CREDENTIALS_JSON", "").strip()
 _GOOGLE_CREDENTIALS_ENV_PATH = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
 
-# On Railway/cloud: store full JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON env var.
+# On cloud hosts: store full JSON in GOOGLE_APPLICATION_CREDENTIALS_JSON env var.
 # For local dev, we persist the inline JSON into the repo-local credentials dir so
 # the same path works on Windows and future restarts do not depend on /tmp.
 def _resolve_credentials_path(path: str | Path) -> Path:
@@ -148,6 +148,159 @@ def has_ga4_configured() -> bool:
 
 def has_search_console_configured() -> bool:
     return bool(SEARCH_CONSOLE_SITE_URL) and has_google_credentials()
+
+
+def ping_google_ads() -> dict:
+    if not GOOGLE_ADS_REFRESH_TOKEN:
+        return {"ok": False, "detail": "GOOGLE_ADS_REFRESH_TOKEN missing"}
+    try:
+        from tools.google_ads import _run_query
+
+        rows = _run_query(
+            "SELECT metrics.impressions FROM customer WHERE segments.date DURING LAST_7_DAYS LIMIT 1"
+        )
+        if rows and isinstance(rows[0], dict) and rows[0].get("error"):
+            return {"ok": False, "detail": rows[0]["error"][:200]}
+        return {"ok": True, "detail": f"customer {GOOGLE_ADS_CUSTOMER_ID or '(unset)'}"}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_meta_ads() -> dict:
+    if not META_ACCESS_TOKEN or not META_AD_ACCOUNT_ID:
+        return {"ok": False, "detail": "META_ACCESS_TOKEN or META_AD_ACCOUNT_ID missing"}
+    try:
+        from tools.meta_ads import _init_api
+
+        acct = _init_api()
+        if not acct:
+            return {"ok": False, "detail": "Meta API init failed (check token / account id)"}
+        info = acct.api_get(fields=["name", "account_status"])
+        return {
+            "ok": True,
+            "detail": f"{info.get('name', 'account')} · status {info.get('account_status')}",
+        }
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_instagram() -> dict:
+    if not INSTAGRAM_BUSINESS_ACCOUNT_ID or not META_ACCESS_TOKEN:
+        return {"ok": False, "detail": "INSTAGRAM_BUSINESS_ACCOUNT_ID or META_ACCESS_TOKEN missing"}
+    try:
+        import httpx
+
+        url = f"https://graph.facebook.com/v21.0/{INSTAGRAM_BUSINESS_ACCOUNT_ID}"
+        resp = httpx.get(
+            url,
+            params={
+                "fields": "username,followers_count,media_count",
+                "access_token": META_ACCESS_TOKEN,
+            },
+            timeout=30,
+        )
+        data = resp.json()
+        if "error" in data:
+            return {"ok": False, "detail": data["error"].get("message", str(data))[:200]}
+        return {
+            "ok": True,
+            "detail": (
+                f"@{data.get('username', '?')} · "
+                f"{data.get('followers_count', 0)} followers · "
+                f"{data.get('media_count', 0)} posts"
+            ),
+        }
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_posthog() -> dict:
+    if not POSTHOG_API_KEY or not POSTHOG_PROJECT_ID:
+        return {"ok": False, "detail": "POSTHOG_API_KEY or POSTHOG_PROJECT_ID missing"}
+    try:
+        from tools.posthog import _hogql_query
+
+        result = _hogql_query(
+            "SELECT count() AS events FROM events WHERE timestamp > now() - interval 7 day"
+        )
+        if not result or result.get("error"):
+            return {"ok": False, "detail": (result or {}).get("error", "empty response")[:200]}
+        events_7d = result.get("results", [[0]])[0][0]
+        return {"ok": True, "detail": f"project {POSTHOG_PROJECT_ID}", "events_7d": str(events_7d)}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_semrush() -> dict:
+    if not SEMRUSH_API_KEY:
+        return {"ok": False, "detail": "SEMRUSH_API_KEY missing"}
+    try:
+        import httpx
+
+        resp = httpx.get(
+            "https://api.semrush.com/",
+            params={
+                "type": "domain_ranks",
+                "key": SEMRUSH_API_KEY,
+                "domain": "sourcy.ai",
+                "database": "us",
+                "export_columns": "Dn,Rk",
+            },
+            timeout=30,
+        )
+        text = resp.text.strip()
+        if text.startswith("ERROR"):
+            return {"ok": False, "detail": text[:200]}
+        return {"ok": True, "detail": "sourcy.ai domain ranks (US)"}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_sourcy_db() -> dict:
+    try:
+        from tools.sourcy_activation import _api_get
+
+        rows = _api_get("unified_activation_conversations", {"select": "id", "limit": 1})
+        if not rows or (isinstance(rows[0], dict) and rows[0].get("error")):
+            err = rows[0].get("error", "no data") if rows else "no response"
+            return {"ok": False, "detail": str(err)[:200]}
+        return {"ok": True, "detail": "api.sourcy.ai PostgREST"}
+    except Exception as ex:
+        return {"ok": False, "detail": str(ex)[:200]}
+
+
+def ping_openai() -> dict:
+    if not OPENAI_API_KEY:
+        return {"ok": False, "detail": "OPENAI_API_KEY missing"}
+    return {"ok": True, "detail": "key configured"}
+
+
+def ping_all_integrations() -> dict[str, dict]:
+    """Live API checks for Memory tab and diagnostics (parallel)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    checks = {
+        "openai": ping_openai,
+        "ga4": ping_ga4,
+        "search_console": ping_search_console,
+        "google_ads": ping_google_ads,
+        "meta_ads": ping_meta_ads,
+        "semrush": ping_semrush,
+        "instagram": ping_instagram,
+        "posthog": ping_posthog,
+        "sourcy_db": ping_sourcy_db,
+    }
+    out: dict[str, dict] = {}
+    with ThreadPoolExecutor(max_workers=len(checks)) as pool:
+        futures = {pool.submit(fn): key for key, fn in checks.items()}
+        for fut in as_completed(futures):
+            key = futures[fut]
+            try:
+                out[key] = fut.result()
+            except Exception as ex:
+                out[key] = {"ok": False, "detail": str(ex)[:200]}
+    return out
+
 
 # --- Target Markets ---
 def load_target_markets():

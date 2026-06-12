@@ -15,12 +15,21 @@ export default function MemoryPage() {
   const [state, setState] = useState<MemoryState | null>(null);
   const [section, setSection] = useState<Section>("persona");
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [apiRefreshing, setApiRefreshing] = useState(false);
 
   useEffect(() => {
     api.memoryState().then(setState).catch(() => {});
   }, []);
 
   const reload = () => api.memoryState().then(setState);
+
+  const recheckApis = () => {
+    setApiRefreshing(true);
+    api
+      .memoryState()
+      .then(setState)
+      .finally(() => setApiRefreshing(false));
+  };
 
   if (!state) return <div className="p-8 text-muted">Loading memory…</div>;
 
@@ -70,7 +79,13 @@ export default function MemoryPage() {
           {section === "logo" && <LogoUploader design={state.design_system} onSaved={() => { setSavedAt(Date.now()); reload(); }} />}
           {section === "knowledge" && <KnowledgePanel principles={state.principles} winners={state.winners} />}
           {section === "api" && (
-            <ApiStatus status={state.api_status} detail={state.api_status_detail} />
+            <ApiStatus
+              status={state.api_status}
+              detail={state.api_status_detail}
+              checkedAt={state.integrations_checked_at}
+              onRefresh={recheckApis}
+              refreshing={apiRefreshing}
+            />
           )}
         </div>
       </div>
